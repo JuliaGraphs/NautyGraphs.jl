@@ -40,13 +40,10 @@ Base.size(gset::Graphset) = (gset.n, gset.n)
 Base.IndexStyle(::Type{Graphset}) = IndexCartesian()
 Base.similar(gset::Graphset{W}) where {W} = Graphset{W}(gset.n, gset.m)
 
-function Base.copy!(dest::Graphset{W}, src::Graphset{W}) where {W}
-    dest.n == src.n || throw(ArgumentError("graphsets must have the same size for copy!"))
-    if dest.m == src.m
-        copyto!(dest.words, src.words)
-    else
-        dest .== src
-    end
+function Base.copy!(dest::Graphset, src::Graphset)
+    dest.n = src.n
+    dest.m = src.m
+    copy!(dest.words, src.words)
     return dest
 end
 

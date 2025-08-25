@@ -18,7 +18,7 @@ using JET
 
    @test_opt target_modules=(NautyGraphs,) add_edge!(g, 1, 2)
    @test_opt target_modules=(NautyGraphs,) add_vertex!(g)
-   @test_opt target_modules=(NautyGraphs,) add_vertex!(g, 5)
+   @test_opt target_modules=(NautyGraphs,) add_vertex!(g; vertex_label=5)
    @test_opt target_modules=(NautyGraphs,) rem_vertex!(g, 3)
    @test_opt target_modules=(NautyGraphs,) rem_edge!(g, 2, 5)
    @test_opt target_modules=(NautyGraphs,) outneighbors(g, 1)

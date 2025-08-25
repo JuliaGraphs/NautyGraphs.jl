@@ -240,8 +240,8 @@ function Graphs.rem_edge!(g::DenseNautyGraph, e::Edge)
 end
 Graphs.rem_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.rem_edge!(g, edgetype(g)(i, j))
 
-function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer, vertex_labels=0)
-    vertex_labels isa Number || n != length(vertex_labels) && throw(ArgumentError("Incompatible length: trying to add `n` vertices, but`vertex_labels` has length $(length(vertex_labels))."))
+function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer; vertex_labels=0)
+    vertex_labels isa Number || n != length(vertex_labels) && throw(ArgumentError("Incompatible length: trying to add `n=$n` vertices, but`vertex_labels` has length $(length(vertex_labels))."))
     ng = nv(g)
     _add_vertices!(g.graphset, n)
     resize!(g.labels, ng + n)
@@ -249,12 +249,13 @@ function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer, vertex_labels=0)
     g.hashval = nothing
     return n
 end
-Graphs.add_vertex!(g::DenseNautyGraph, vertex_label::Integer=0) = Graphs.add_vertices!(g, 1, vertex_label) > 0
+Graphs.add_vertex!(g::DenseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
 
 function Graphs.rem_vertices!(g::DenseNautyGraph, inds)
     all(i->has_vertex(g, i), inds) || return false
 
     _rem_vertices!(g.graphset, inds)
+    deleteat!(g.labels, inds)
 
     ne = sum(g.graphset)
     is_directed(g) || (ne ÷= 2)

@@ -10,6 +10,6 @@ using Base.Threads
     include("graphset.jl")
     include("utils.jl")
     include("interface.jl")
-    include("aqua.jl")
-    include("jet.jl")
+    VERSION >= v"1.11" && include("aqua.jl")
+    VERSION >= v"1.11" && include("jet.jl")
 end

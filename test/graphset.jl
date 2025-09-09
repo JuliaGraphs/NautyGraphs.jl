@@ -52,4 +52,12 @@ end
 
     @test gs3 == gs4
     @test collect(active_words(gs3)) == collect(active_words(gs4))
+      
+    gs5 = Graphset{UInt64}(3, 2)
+    gs6 = Graphset{UInt64}(3, 2)
+
+    NautyGraphs._rem_vertex!(gs5, 2)
+    NautyGraphs._add_vertex!(gs5)
+
+    @test gs5 == gs6
 end

@@ -46,6 +46,11 @@ function Base.copy!(dest::Graphset, src::Graphset)
     copy!(dest.words, src.words)
     return dest
 end
+function Base.copy(gset::Graphset)
+    out = similar(gset)
+    copyto!(out.words, gset.words)
+    return out
+end
 
 @inline wordtype(::Graphset{W}) where {W} = W
 @inline wordsize(u::Unsigned) = 8 * sizeof(u)
@@ -148,7 +153,8 @@ function _rem_vertices!(gset::Graphset{W}, inds) where {W}
     deleteat!(gset.words, Iterators.flatten(1+(i-1)*gset.m:i*gset.m for i in inds))
     gset.n -= nrv
 
-    wordblock = reshape(gset.words, gset.m, gset.n)'
+    n, m = gset.n, gset.m
+    linidx = LinearIndices((m, n))'
 
     δ = 0
     lastind = 0
@@ -156,13 +162,13 @@ function _rem_vertices!(gset::Graphset{W}, inds) where {W}
         ind < lastind && throw(ArgumentError("indices must be unique and sorted"))
 
         wordidx, bitidx = bitaddress(gset, 1, ind - δ)
-        for i in axes(wordblock, 1)
-            fillword = wordidx == size(wordblock, 2) ? zero(W) : wordblock[i, wordidx+1]
-            wordblock[i, wordidx] = partial_leftshift(wordblock[i, wordidx], 1, bitidx+1, fillword)
+        for i in 1:n
+            fillword = wordidx == m ? zero(W) : gset.words[linidx[i, wordidx+1]]
+            gset.words[linidx[i, wordidx]] = partial_leftshift(gset.words[linidx[i, wordidx]], 1, bitidx+1, fillword)
 
-            for j in wordidx+1:size(wordblock, 2)
-                fillword = j == size(wordblock, 2) ? zero(W) : wordblock[i, j+1]
-                wordblock[i, j] = partial_leftshift(wordblock[i, j], 1, 1, fillword)
+            for j in wordidx+1:m
+                fillword = j == m ? zero(W) : gset.words[linidx[i, j+1]]
+                gset.words[linidx[i, j]] = partial_leftshift(gset.words[linidx[i, j]], 1, 1, fillword)
             end
         end
         δ += 1

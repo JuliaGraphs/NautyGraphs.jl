@@ -112,7 +112,7 @@ Graphs.ne(g::DenseNautyGraph) = g.ne
 Graphs.vertices(g::DenseNautyGraph) = Base.OneTo(nv(g))
 Graphs.has_vertex(g::DenseNautyGraph, v) = v ∈ vertices(g)
 function Graphs.has_edge(g::DenseNautyGraph, s::Integer, d::Integer)
-    has_vertex(g, s) && has_vertex(g, s) || return false
+    has_vertex(g, s) && has_vertex(g, d) || return false
     return g.graphset[s, d]
 end
 function Graphs.outdegree(g::DenseNautyGraph, v::Integer)

@@ -121,6 +121,9 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         @test indegree(rand_g, vertex) == length(inneighbors(rand_g, vertex))
     end
 
+    @test has_edge(rand_g, 1, 71) == false
+    @test has_edge(rand_g, 75, 5) == false
+
     es = [Edge(1, 2), Edge(2, 3), Edge(2, 4)]
     g = NautyDiGraph(4)
     for e in es

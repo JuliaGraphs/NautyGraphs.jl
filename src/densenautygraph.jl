@@ -15,8 +15,8 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     if !isnothing(vertex_labels) && graphset.n != length(vertex_labels)
         throw(ArgumentError("The length of `graphset` is not compatible with length of `vertex_labels`. See the nauty user guide for how to correctly construct `graphset`."))
     end
-    ne = sum(graphset)
-    !D && (ne ÷= 2)
+
+    ne = D ? sum(graphset) : (sum(graphset) + tr(graphset)) ÷ 2
 
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, graphset.n)
@@ -112,7 +112,7 @@ Graphs.ne(g::DenseNautyGraph) = g.ne
 Graphs.vertices(g::DenseNautyGraph) = Base.OneTo(nv(g))
 Graphs.has_vertex(g::DenseNautyGraph, v) = v ∈ vertices(g)
 function Graphs.has_edge(g::DenseNautyGraph, s::Integer, d::Integer)
-    has_vertex(g, s) && has_vertex(g, s) || return false
+    has_vertex(g, s) && has_vertex(g, d) || return false
     return g.graphset[s, d]
 end
 function Graphs.outdegree(g::DenseNautyGraph, v::Integer)

@@ -65,6 +65,25 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         @test adjacency_matrix(g) == adjacency_matrix(ng)
     end
 
+    # LOOPS
+    g_loop0 = Graph([1 0 0; 0 1 0; 0 0 0])
+    ng_loop0 = NautyGraph([1 0 0; 0 1 0; 0 0 0])
+
+    @test ne(g_loop0) == ne(ng_loop0)
+
+    add_edge!(g_loop0, 1, 2)
+    add_edge!(ng_loop0, 1, 2)
+    @test ne(ng_loop0) == ne(g_loop0)
+
+    g_diloop0 = DiGraph([1 0 0; 0 1 0; 0 0 0])
+    ng_diloop0 = NautyDiGraph([1 0 0; 0 1 0; 0 0 0])
+
+    @test ne(g_diloop0) == ne(ng_diloop0)
+
+    add_edge!(g_diloop0, 1, 2)
+    add_edge!(ng_diloop0, 1, 2)
+    @test ne(ng_diloop0) == ne(g_diloop0)
+
     g_loop = Graph(2)
     ng_loop = NautyGraph(2)
 

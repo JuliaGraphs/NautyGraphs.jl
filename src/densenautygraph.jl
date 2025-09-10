@@ -15,8 +15,8 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     if !isnothing(vertex_labels) && graphset.n != length(vertex_labels)
         throw(ArgumentError("The length of `graphset` is not compatible with length of `vertex_labels`. See the nauty user guide for how to correctly construct `graphset`."))
     end
-    ne = sum(graphset)
-    !D && (ne ÷= 2)
+
+    ne = D ? sum(graphset) : (sum(graphset) + tr(graphset)) ÷ 2
 
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, graphset.n)

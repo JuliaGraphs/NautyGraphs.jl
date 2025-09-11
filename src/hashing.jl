@@ -1,35 +1,3 @@
-mutable struct HashCache
-    hash64::UInt64
-    hash128::UInt128
-    alg64::DataType
-    alg128::DataType
-    set64::Bool
-    set128::Bool
-end
-function HashCache()
-    return HashCache(0, 0, XXHash64Alg, XXHash128Alg, false, false)
-end
-Base.copy(hc::HashCache) = HashCache(hc.hash64, hc.hash128, hc.alg64, hc.alg128, hc.set64, hc.set128)
-function Base.copy!(dest::HashCache, src::HashCache)
-    dest.hash64 = src.hash64
-    dest.hash128 = src.hash128
-    dest.alg64 = src.alg64
-    dest.alg128 = src.alg128
-    dest.set64 = src.set64
-    dest.set128 = src.set128
-    return dest
-end
-
-# function Base.:(==)(hc1::HashCache, hc2::HashCache)
-#     if hc1.set64 && hc2.set64 && hc1.alg64 == hc2.alg64
-#        return hc1.hash64 == hc2.hash64
-#     elseif hc1.set128 && hc2.set128 && hc1.alg128 == hc2.alg128
-#         return hc1.hash128 == hc2.hash128
-#     else
-#         return missing
-#     end
-# end
-
 abstract type AbstractHashAlg end
 struct Base64Alg <: AbstractHashAlg end
 struct XXHash64Alg <: AbstractHashAlg end
@@ -69,33 +37,6 @@ end
 __SHAhash128(x) = reinterpret(UInt128, __SHAhash(x))[1]
 function _ghash_SHA128(gset::Graphset, labels)
     return __SHAhash128((labels, collect(active_words(gset))))
-end
-
-function sethash!(hcache::HashCache, h::UInt64, hashalg)
-    hcache.hash64 = h
-    hcache.alg64 = typeof(hashalg)
-    hcache.set64 = true
-    return h
-end
-function sethash!(hcache::HashCache, h::UInt128, hashalg)
-    hcache.hash128 = h
-    hcache.alg128 = typeof(hashalg)
-    hcache.set128 = true
-    return h
-end
-function gethash(hcache, hashalg::AbstractHashAlg)
-    if hcache.set64 && hashalg isa hcache.alg64
-        return hcache.hash64
-    elseif hcache.set128 && hashalg isa hcache.alg128 
-        return hcache.hash128
-    else
-        return nothing
-    end
-end
-function clearhash!(hcache)
-    hcache.set64 = false
-    hcache.set128 = false
-    return
 end
 
 function _ghash(gset, labels; alg::AbstractHashAlg)

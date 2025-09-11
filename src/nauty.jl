@@ -104,13 +104,13 @@ end
 end
 
 """
-    nauty(g::AbstractNautyGraph, [options::NautyOptions; canonize=false, compute_hash=true, hashalg=XXHash64Alg()])
+    nauty(g::AbstractNautyGraph, [options::NautyOptions; canonize=false])
 
 Compute a graph `g`'s canonical form and automorphism group.
 """
 function nauty(::AbstractNautyGraph, ::NautyOptions; kwargs...) end
 
-function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false, compute_hash=true, hashalg=XXHash64Alg()::AbstractHashAlg)
+function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
         error("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed.")
     end
@@ -123,13 +123,7 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
     # generators = Vector{Cint}[] # TODO: extract generators from nauty call
     autg = AutomorphismGroup(statistics.grpsize1 * 10^statistics.grpsize2, orbits)
 
-    if canonize
-        copy!(g.graphset, canong)
-        permute!(g.labels, canonperm)
-        compute_hash && _sethash!(g; alg=hashalg)
-    else
-        compute_hash && _sethash!(g, canong, canonperm; alg=hashalg)
-    end
+    canonize && _copycanon!(g, canong, canonperm)
     return canonperm, autg
 end
 
@@ -140,12 +134,16 @@ Reorder `g`'s vertices to be in canonical order. Returns the permutation `p` use
 """
 function canonize!(::AbstractNautyGraph) end
 
-function canonize!(g::DenseNautyGraph; compute_hash=true, hashalg=XXHash64Alg()::AbstractHashAlg)
+function canonize!(g::DenseNautyGraph)
     canong, canonperm, _ = _densenauty(g)
+    _copycanon!(g, canong, canonperm)
+    return canonperm
+end
+function _copycanon!(g, canong, canonperm)
     copy!(g.graphset, canong)
     permute!(g.labels, canonperm)
-    compute_hash && _sethash!(g; alg=hashalg)
-    return canonperm
+    g.iscanon = true
+    return
 end
 
 """
@@ -168,6 +166,7 @@ Check whether two graphs `g` and `h` are isomorphic to each other by comparing t
 function is_isomorphic(::AbstractNautyGraph, ::AbstractNautyGraph) end
 
 function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
+    iscanon(g) && iscanon(h) && return g == h
     canong, permg, _ = _densenauty(g)
     canonh, permh, _ = _densenauty(h)
     return canong == canonh && view(g.labels, permg) == view(h.labels, permh)
@@ -196,23 +195,12 @@ ensure that the hashes were computed with the same algorithm, or you will get me
 """
 function ghash(::AbstractNautyGraph; alg=XXHash64Alg()::AbstractHashAlg) end
 
-
 function ghash(g::DenseNautyGraph; alg=XXHash64Alg()::AbstractHashAlg)
-    h = gethash(g.hashcache, alg)
-    isnothing(h) || return h
-
-    canong, canonperm, _ = _densenauty(g)
-    h = _sethash!(g, canong, canonperm; alg)
+    if iscanon(g)
+        return _ghash(g.graphset, g.labels; alg)
+    else
+        canong, canonperm, _ = _densenauty(g)
+        return _ghash(canong, @view g.labels[canonperm]; alg)
+    end
     return h
-end
-
-function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm; alg=XXHash64Alg()::AbstractHashAlg)
-    h = _ghash(canong, @view g.labels[canonperm]; alg)
-    sethash!(g.hashcache, h, alg)
-    return h 
-end
-function _sethash!(canong::DenseNautyGraph; alg=XXHash64Alg()::AbstractHashAlg)
-    h = _ghash(canong.graphset, canong.labels; alg)
-    sethash!(canong.hashcache, h, alg)
-    return h 
 end

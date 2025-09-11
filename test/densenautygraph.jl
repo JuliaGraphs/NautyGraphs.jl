@@ -173,8 +173,7 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
     @test h.ne == g.ne
     @test h.graphset.m == g.graphset.m
     @test h.labels == g.labels
-    @test h.hashcache.hash64 == g.hashcache.hash64
-    @test h.hashcache.hash128 == g.hashcache.hash128
+    @test h.iscanon == g.iscanon
 
     glab = NautyGraph(5; vertex_labels=1:5)
     add_edge!(glab, 1, 2)

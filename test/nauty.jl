@@ -103,11 +103,9 @@
 
     @test g4 == h4
     @test Base.hash(g4) == Base.hash(h4)
-
-    NautyGraphs.clearhash!(g4.hashcache)
-    @test g4 == h4
+    # dont do this during normal use!
+    g4.iscanon = true
     @test Base.hash(g4) == Base.hash(h4)
-
 
     g5 = NautyGraph(10; vertex_labels=10:-1:1)
     add_edge!(g5, 1, 2)
@@ -163,33 +161,18 @@
     ghash(glarge; alg=SHA128Alg())
     @test_throws ArgumentError ghash(glarge; alg=Base64Alg())
 
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    nauty(g; canonize=false, compute_hash=true, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == true
+    g6 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    nauty(g6; canonize=false)
+    @test !iscanon(g6)
 
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    nauty(g; canonize=false, compute_hash=false, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == false
+    g7 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    nauty(g7; canonize=true)
 
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    nauty(g; canonize=true, compute_hash=true, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == true
-    gcopy = copy(g)
-    canonize!(g)
-    @test g == gcopy
+    @test iscanon(g7)
+    @test ghash(g6) == ghash(g7)
 
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    nauty(g; canonize=false, compute_hash=false, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == false
-    gcopy = copy(g)
-    canonize!(g)
-    @test g != gcopy
-
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    canonize!(g; compute_hash=true, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == true
-
-    g = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
-    canonize!(g; compute_hash=false, hashalg=XXHash64Alg())
-    @test g.hashcache.set64 == false
+    g8 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    @test !iscanon(g8)
+    canonize!(g8)
+    @test iscanon(g8)
 end

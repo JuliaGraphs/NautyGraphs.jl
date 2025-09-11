@@ -32,6 +32,7 @@ export
     DenseNautyGraph,
     AutomorphismGroup,
     labels,
+    iscanon,
     nauty,
     canonize!,
     canonical_permutation,

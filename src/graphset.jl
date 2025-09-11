@@ -103,9 +103,14 @@ end
     return gset
 end
 
-function _increase_padding!(gset::Graphset{W}, m::Integer=1) where {W}
-    # TODO: optimize this
-    for _ in Base.OneTo(m)
+@inline function active_words(gset::Graphset{W}) where {W}
+    # Return the words actually used for representing the graph, without any unnecessary padding
+    m_eff = cld(gset.n, wordsize(W))
+    return (gset.words[(i - 1) * gset.m + j] for j in 1:m_eff for i in 1:gset.n)
+end
+
+function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+    for _ in Base.OneTo(Δm)
         gset.m += 1
         for i in Base.OneTo(gset.n)
             insert!(gset.words, i * gset.m, zero(W))
@@ -113,6 +118,11 @@ function _increase_padding!(gset::Graphset{W}, m::Integer=1) where {W}
     end
     return gset
 end
+# function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+#     return gset
+# end
+# function minimize_padding!(gset::Graphset{W}) where {W}
+# end
 
 @inline function partial_leftshift(word::Unsigned, n::Integer, start::Integer, fillword::Unsigned=zero(word))
     # Starting from the `start`th bit from the left of `word`, shift all bits to the left `n` times,
@@ -130,7 +140,7 @@ end
 end
 
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
-    _increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
+    increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
     append!(gset.words, fill(zero(W), n*gset.m))
     gset.n += n
     return gset

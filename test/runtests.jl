@@ -8,7 +8,7 @@ using Base.Threads
     include("densenautygraph.jl")
     include("nauty.jl")
     include("graphset.jl")
-    include("utils.jl")
+    include("hashing.jl")
     VERSION >= v"1.9-" && include("interface.jl")
     include("aqua.jl")
     VERSION >= v"1.10" && include("jet.jl")

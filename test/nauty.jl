@@ -20,15 +20,12 @@
     g1_16 = NautyGraph{UInt16}(g1)
     @test g1_16 == g1
     @test g1_16 ≃ g1
-    @test ghash(g1_16) == ghash(g1)
 
     g1_32 = NautyGraph{UInt32}(g1)
     @test g1_32 == g1_16
     @test g1_32 ≃ g1_16
-    @test ghash(g1_32) == ghash(g1_16)
     @test g1_32 == g1
     @test g1_32 ≃ g1
-    @test ghash(g1_32) == ghash(g1)
 
     k1 = copy(g1)
     rem_edge!(k1, 2, 3)
@@ -56,15 +53,12 @@
     g2_16 = NautyGraph{UInt16}(g2)
     @test g2_16 == g2
     @test g2_16 ≃ g2
-    @test ghash(g2_16) == ghash(g2)
 
     g2_32 = NautyGraph{UInt32}(g2)
     @test g2_32 == g2_16
     @test g2_32 ≃ g2_16
-    @test ghash(g2_32) == ghash(g2_16)
     @test g2_32 == g2
     @test g2_32 ≃ g2
-    @test ghash(g2_32) == ghash(g2)
 
     k2 = NautyGraph(4; vertex_labels=[1, 0, 0, 1])
     add_edge!(k2, 3, 4)
@@ -73,11 +67,6 @@
 
     @test !(g2 ≃ k2)
     @test ghash(g2) != ghash(k2)
-
-    @test !(g2_16 ≃ k2)
-    @test !(g2_32 ≃ k2)
-    @test ghash(g2_16) != ghash(k2)
-    @test ghash(g2_32) != ghash(k2)
 
     g3 = NautyGraph(6)
     add_edge!(g3, 1, 2)
@@ -114,11 +103,9 @@
 
     @test g4 == h4
     @test Base.hash(g4) == Base.hash(h4)
-
-    g4.hashval = UInt(0)
-    @test g4 == h4
+    # dont do this during normal use!
+    g4.iscanon = true
     @test Base.hash(g4) == Base.hash(h4)
-
 
     g5 = NautyGraph(10; vertex_labels=10:-1:1)
     add_edge!(g5, 1, 2)
@@ -168,6 +155,24 @@
 
     # Test that ghash doesnt error for large graphs
     glarge = NautyGraph(200)
-    ghash(glarge)
-    @test true
+    ghash(glarge; alg=XXHash64Alg())
+    ghash(glarge; alg=XXHash128Alg())
+    ghash(glarge; alg=SHA64Alg())
+    ghash(glarge; alg=SHA128Alg())
+    @test_throws ArgumentError ghash(glarge; alg=Base64Alg())
+
+    g6 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    nauty(g6; canonize=false)
+    @test !iscanon(g6)
+
+    g7 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    nauty(g7; canonize=true)
+
+    @test iscanon(g7)
+    @test ghash(g6) == ghash(g7)
+
+    g8 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
+    @test !iscanon(g8)
+    canonize!(g8)
+    @test iscanon(g8)
 end

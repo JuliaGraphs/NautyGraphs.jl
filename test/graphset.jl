@@ -1,3 +1,5 @@
+using NautyGraphs: active_words
+
 rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
 
 function test_graphsets(A; mfacts)
@@ -37,11 +39,25 @@ end
 
     @test gs1 != gs2
 
-    gs4 = Graphset{UInt64}(3, 2)
+    gs3 = copy(gs1)
+    gs4 = copy(gs1)
+
+    NautyGraphs.increase_padding!(gs4, 1)
+
+    @test gs3 == gs4
+    @test gs3.words == collect(active_words(gs4))
+
+    NautyGraphs.increase_padding!(gs4, 2)
+    NautyGraphs.increase_padding!(gs4, 3)
+
+    @test gs3 == gs4
+    @test collect(active_words(gs3)) == collect(active_words(gs4))
+      
     gs5 = Graphset{UInt64}(3, 2)
+    gs6 = Graphset{UInt64}(3, 2)
 
-    NautyGraphs._rem_vertex!(gs4, 2)
-    NautyGraphs._add_vertex!(gs4)
+    NautyGraphs._rem_vertex!(gs5, 2)
+    NautyGraphs._add_vertex!(gs5)
 
-    @test gs4 == gs5
+    @test gs5 == gs6
 end

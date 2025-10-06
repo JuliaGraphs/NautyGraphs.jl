@@ -257,10 +257,7 @@ function Graphs.rem_vertices!(g::DenseNautyGraph, inds)
     _rem_vertices!(g.graphset, inds)
     deleteat!(g.labels, inds)
 
-    ne = sum(g.graphset)
-    is_directed(g) || (ne ÷= 2)
-    g.ne = ne
-
+    g.ne = is_directed(g) ? sum(g.graphset) : (sum(g.graphset) + tr(g.graphset)) ÷ 2
     g.hashval = nothing
     return true
 end

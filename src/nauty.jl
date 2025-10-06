@@ -43,12 +43,15 @@ end
     return :(NautyOptions(cglobal((:dispatch_graph, $(libnauty(W))), Cvoid); digraph_or_loops, ignorelabels, groupinfo))
 end
 
-const DEFAULTOPTIONS16 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS32 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS64 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-default_options(::DenseNautyGraph{D,UInt16}) where {D} = DEFAULTOPTIONS16
-default_options(::DenseNautyGraph{D,UInt32}) where {D} = DEFAULTOPTIONS32
-default_options(::DenseNautyGraph{D,UInt64}) where {D} = DEFAULTOPTIONS64
+const DEFAULTOPTIONS_DENSE16 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_DENSE32 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_DENSE64 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_SPARSE = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+
+default_options(::DenseNautyGraph{D,UInt16}) where {D} = DEFAULTOPTIONS_DENSE16
+default_options(::DenseNautyGraph{D,UInt32}) where {D} = DEFAULTOPTIONS_DENSE32
+default_options(::DenseNautyGraph{D,UInt64}) where {D} = DEFAULTOPTIONS_DENSE64
+default_options(::SparseNautyGraph) = DEFAULTOPTIONS_SPARSE
 
 mutable struct NautyStatistics
     grpsize1::Cdouble
@@ -76,7 +79,7 @@ struct AutomorphismGroup
     # generators::Vector{Vector{Cint}} #TODO: not implemented
 end
 
-function _densenauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D,W}
+function _nauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D,W}
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
     n, m = g.graphset.n, g.graphset.m
 
@@ -84,13 +87,21 @@ function _densenauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_opti
     orbits = zeros(Cint, n)
     canong = Graphset{W}(n, m)
 
-    _ccall_densenauty(g, lab, ptn, orbits, options, statistics, canong)
+    _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
+    canonperm = (lab .+= 1)
+    return canong, canonperm, orbits, statistics
+end
+function _nauty(g::SparseNautyGraph{D}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D}
+    lab, ptn = vertexlabels2labptn(g.labels)
+    orbits = zeros(Cint, nv(g))
+    canong = SparseNautyGraph{D}(nv(g))
 
+    _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
     canonperm = (lab .+= 1)
     return canong, canonperm, orbits, statistics
 end
 
-@generated function _ccall_densenauty(g::DenseNautyGraph{D,W}, lab, ptn, orbits, options, statistics, canong) where {D,W}
+@generated function _ccall_nauty(g::DenseNautyGraph{D,W}, lab, ptn, orbits, options, statistics, canong) where {D,W}
     return quote @ccall $(libnauty(W)).densenauty(
         g.graphset.words::Ref{W},
         lab::Ref{Cint},
@@ -101,6 +112,16 @@ end
         g.graphset.m::Cint,
         g.graphset.n::Cint,
         canong.words::Ref{W})::Cvoid end
+end
+@generated function _ccall_nauty(g::SparseNautyGraph, lab, ptn, orbits, options, statistics, canong)
+    return quote @ccall $(libnauty(g)).sparsenauty(
+        Ref(g)::Ref{SparseGraphGraphRep},
+        lab::Ref{Cint},
+        ptn::Ref{Cint},
+        orbits::Ref{Cint},
+        Ref(options)::Ref{NautyOptions},
+        Ref(statistics)::Ref{NautyStatistics},
+        Ref(canong)::Ref{SparseGraphGraphRep})::Cvoid end
 end
 
 function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm)
@@ -136,7 +157,7 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
         error("`options.getcanon` needs to be enabled.")
     end
 
-    canong, canonperm, orbits, statistics = _densenauty(g, options)
+    canong, canonperm, orbits, statistics = _nauty(g, options)
     # generators = Vector{Cint}[] # TODO: extract generators from nauty call
     autg = AutomorphismGroup(statistics.grpsize1 * 10^statistics.grpsize2, orbits)
 
@@ -153,7 +174,7 @@ Reorder `g`'s vertices to be in canonical order. Returns the permutation `p` use
 function canonize!(::AbstractNautyGraph) end
 
 function canonize!(g::DenseNautyGraph)
-    canong, canonperm, _ = _densenauty(g)
+    canong, canonperm, _ = _nauty(g)
     _sethash!(g, canong, canonperm)
     _canonize!(g, canong, canonperm)
     return canonperm
@@ -167,7 +188,7 @@ Return the permutation `p` needed to canonize `g`. This permutation satisfies `g
 function canonical_permutation(::AbstractNautyGraph) end
 
 function canonical_permutation(g::DenseNautyGraph)
-    _, canonperm, _ = _densenauty(g)
+    _, canonperm, _ = _nauty(g)
     return canonperm
 end
 
@@ -179,8 +200,8 @@ Check whether two graphs `g` and `h` are isomorphic to each other by comparing t
 function is_isomorphic(::AbstractNautyGraph, ::AbstractNautyGraph) end
 
 function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
-    canong, permg, _ = _densenauty(g)
-    canonh, permh, _ = _densenauty(h)
+    canong, permg, _ = _nauty(g)
+    canonh, permh, _ = _nauty(h)
     return canong == canonh && view(g.labels, permg) == view(h.labels, permh)
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
@@ -199,7 +220,7 @@ function ghash(g::DenseNautyGraph)
         return g.hashval
     end
 
-    canong, canonperm, _ = _densenauty(g)
+    canong, canonperm, _ = _nauty(g)
     _sethash!(g, canong, canonperm)
     return g.hashval
 end

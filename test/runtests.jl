@@ -9,7 +9,7 @@ using Base.Threads
     include("nauty.jl")
     include("graphset.jl")
     include("utils.jl")
-    VERSION >= v"1.9-" && include("interface.jl")
-    include("aqua.jl")
-    VERSION >= v"1.10" && include("jet.jl")
+    include("interface.jl")
+    VERSION >= v"1.11" && include("aqua.jl")
+    VERSION >= v"1.11" && include("jet.jl")
 end

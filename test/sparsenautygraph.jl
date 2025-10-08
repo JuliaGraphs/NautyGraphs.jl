@@ -1,6 +1,3 @@
-rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
-symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); A[i, i] = 0; end; A)
-
 @testset "sparsenautygraph" begin
     nverts = [1, 2, 3, 4, 5, 10, 20, 31, 32, 33, 50, 63, 64, 100, 200]
     As = [rand(rng, [zeros(i ÷ 2); 1], i, i) for i in nverts]

@@ -4,6 +4,9 @@ using Test
 using Random, LinearAlgebra
 using Base.Threads
 
+rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
+symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); end; A)
+
 @testset verbose=true "NautyGraphs" begin
     include("densenautygraph.jl")
     include("sparsenautygraph.jl")

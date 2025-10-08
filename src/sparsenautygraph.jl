@@ -237,7 +237,7 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     end
     return true
 end
-# Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:DenseNautyGraph}) = e2 == e1
+Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph}) = e2 == e1
 
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D

@@ -16,8 +16,8 @@
         g, ng = copy(g), copy(ng)
 
         @test adjacency_matrix(g) == adjacency_matrix(ng)
-        # @test edges(ng) == edges(g)
-        # @test collect(edges(g)) == collect(edges(ng))
+        @test edges(ng) == edges(g)
+        @test collect(edges(g)) == collect(edges(ng))
 
         rv = sort(unique(rand(rng, 1:nv(ng), 4)))
 
@@ -26,18 +26,18 @@
         @test adjacency_matrix(g) == adjacency_matrix(ng)
     end
 
-    # for (g, ng) in zip(gs, ngs)
-    #     g, ng = copy(g), copy(ng)
+    for (g, ng) in zip(gs, ngs)
+        g, ng = copy(g), copy(ng)
 
-    #     es = edges(g)
-    #     if !isempty(es)
-    #         edge = last(collect(es))
+        es = edges(g)
+        if !isempty(es)
+            edge = last(collect(es))
 
-    #         rem_edge!(g, edge)
-    #         rem_edge!(ng, edge)
-    #         @test adjacency_matrix(g) == adjacency_matrix(ng)
-    #     end
-    # end
+            rem_edge!(g, edge)
+            rem_edge!(ng, edge)
+            @test adjacency_matrix(g) == adjacency_matrix(ng)
+        end
+    end
 
     for (g, ng) in zip(gs, ngs)
         g, ng = copy(g), copy(ng)

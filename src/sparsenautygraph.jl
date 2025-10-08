@@ -40,7 +40,6 @@ function SparseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D}
     isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
 
-
     g = SparseNautyGraph{D}(n; vertex_labels)
     for i in axes(A, 1), j in axes(A, 2)
         A[i, j] != 0 && _add_directed_edge!(g, i, j)
@@ -61,6 +60,9 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
     for e in edge_list
         nvg = max(nvg, src(e), dst(e))
     end
+
+    # sort the edgelist to optimize the neighborlist packing
+    edge_list = sort(edge_list)
 
     g = SparseNautyGraph{D}(nvg; vertex_labels)
     for edge in edge_list
@@ -145,6 +147,9 @@ end
     # following the Graph.jl implementation, there is no boundscheck here
     return g.d[v]
 end
+@inline function fadj(g::SparseNautyGraph, v::Integer)
+    return @view g.e[(1 + g.v[v]):(g.v[v] + g.d[v])]
+end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
     return (1 + g.e[i] for i in (1 + g.v[v]):(g.v[v] + g.d[v]))
@@ -162,72 +167,92 @@ function Graphs.edges(g::SparseNautyGraph)
     return SimpleEdgeIter(g)
 end
 eltype(::Type{SimpleEdgeIter{<:SparseNautyGraph}}) = Graphs.SimpleGraphEdge{Int}
-function Base.iterate(eit::SimpleEdgeIter{G}, state=(1, 1)) where {G<:SparseNautyGraph}
+function Base.iterate(eit::SimpleEdgeIter{G}) where {G<:SparseNautyGraph}
+    sortlists!(eit.g)
+    return Base.iterate(eit, (1, 1))
+end
+function Base.iterate(eit::SimpleEdgeIter{G}, state) where {G<:SparseNautyGraph}
     g = eit.g
     n = nv(g)
-    v, nidx = state
+    i, nidx = state
 
-    while nidx > g.d[v]
-        v += 1
+    while nidx > g.d[i]
+        i += 1
         nidx = 1
-        v > n && return nothing
+        i > n && return nothing
     end
 
-    w = 1 + g.e[v + nidx - 1]
+    w = 1 + g.e[g.v[i] + nidx]
 
-    if !is_directed(g) && w < v && has_edge(g, v, w)
-        return Base.iterate(eit, (v, nidx + 1))
+    if !is_directed(g) && w < i && has_edge(g, i, w)
+        return Base.iterate(eit, (i, nidx + 1))
     else
-        return Graphs.SimpleEdge{Int}(v, w), (v, nidx + 1)
+        return Graphs.SimpleEdge{Int}(i, w), (i, nidx + 1)
     end
 end
-# function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph})
-#     g = e1.g
-#     h = e2.g
-#     ne(g) == ne(h) || return false
-#     m = min(nv(g), nv(h))
+function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph})
+    g = e1.g
+    h = e2.g
+    sortlists!(g)
+    sortlists!(h)
+    
+    ne(g) == ne(h) || return false
+    m = min(nv(g), nv(h))
 
-#     g.graphset[1:m, 1:m] == h.graphset[1:m, 1:m] || return false
-#     nv(g) == nv(h) && return true
+    for i in 1:m
+        fadj(g, i) == fadj(h, i) || return false
+    end
+    nv(g) == nv(h) && return true
+    for i in (m + 1):nv(g)
+        isempty(fadj(g, i)) || return false
+    end
+    for i in (m + 1):nv(h)
+        isempty(fadj(h, i)) || return false
+    end
+    return true
+end
+function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph})
+    g = e1.g
+    h = e2.g
+    sortlists!(g)
 
-#     g.graphset[m+1:end, :] == 0 || return false
-#     is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
+    ne(g) == ne(h) || return false
+    is_directed(g) == is_directed(h) || return false
 
-#     h.graphset[m+1:end, :] == 0 || return false
-#     is_directed(h) || h.graphset[m+1:end, 1:m] == 0 || return false
-#     return true
-# end
-# function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph})
-#     g = e1.g
-#     h = e2.g
-#     ne(g) == ne(h) || return false
-#     is_directed(g) == is_directed(h) || return false
+    m = min(nv(g), nv(h))
+    
+    for i in 1:m
+        neighs_g = NautyGraphs.fadj(g, i)
+        neighs_h = Graphs.SimpleGraphs.fadj(h, i)
+        length(neighs_g) == length(neighs_h) || return false
+        all(ngh -> 1 + ngh[1] == ngh[2], zip(neighs_g, neighs_h)) || return false
+    end
 
-#     m = min(nv(g), nv(h))
-#     for i in 1:m
-#         outneighbors(g, i) == Graphs.SimpleGraphs.fadj(h, i) || return false
-#         if is_directed(h)
-#             inneighbors(g, i) == Graphs.SimpleGraphs.badj(h, i) || return false
-#         end
-#     end
-#     nv(g) == nv(h) && return true
-
-#     g.graphset[m+1:end, :] == 0 || return false
-#     is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
-
-#     for i in (m + 1):nv(h)
-#         isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
-#         if is_directed(h)
-#             isempty(Graphs.SimpleGraphs.badj(h, i)) || return false
-#         end
-#     end
-#     return true
-# end
+    nv(g) == nv(h) && return true
+    for i in (m + 1):nv(g)
+        isempty(NautyGraphs.fadj(g, i)) || return false
+    end
+    for i in (m + 1):nv(h)
+        isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
+    end
+    return true
+end
 # Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:DenseNautyGraph}) = e2 == e1
 
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D
 Graphs.is_directed(::Type{SparseNautyGraph{D}}) where {D} = D
+
+function trim_edgelist!(g::SparseNautyGraph)
+    excess_length = 0
+
+    for i in Iterators.Reverse(g.e)
+        i != NONEIGHBOR && break
+        excess_length += 1
+    end
+    resize!(g.e, length(g.e) - excess_length)
+    return excess_length
+end
 
 const NONEIGHBOR = -1
 

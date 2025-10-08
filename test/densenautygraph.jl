@@ -1,5 +1,5 @@
 rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
-symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); A[i, i] = 0; end; A)
+symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); end; A)
 
 @testset "densenautygraph" begin
     nverts = [1, 2, 3, 4, 5, 10, 20, 31, 32, 33, 50, 63, 64, 
@@ -24,12 +24,16 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         @test adjacency_matrix(g) == adjacency_matrix(ng)
         @test edges(ng) == edges(g)
         @test collect(edges(g)) == collect(edges(ng))
+        @test nv(g) == nv(ng)
+        @test ne(g) == ne(ng)
 
         rv = sort(unique(rand(rng, 1:nv(ng), 4)))
 
         rem_vertices!(g, rv, keep_order=true)
         rem_vertices!(ng, rv)
         @test adjacency_matrix(g) == adjacency_matrix(ng)
+        @test nv(g) == nv(ng)
+        @test ne(g) == ne(ng)
     end
 
     for (g, ng) in zip(gs, ngs)
@@ -42,6 +46,8 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
             rem_edge!(g, edge)
             rem_edge!(ng, edge)
             @test adjacency_matrix(g) == adjacency_matrix(ng)
+            @test nv(g) == nv(ng)
+            @test ne(g) == ne(ng)
         end
     end
 

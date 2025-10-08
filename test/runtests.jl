@@ -6,6 +6,7 @@ using Base.Threads
 
 @testset verbose=true "NautyGraphs" begin
     include("densenautygraph.jl")
+    include("sparsenautygraph.jl")
     include("nauty.jl")
     include("graphset.jl")
     include("utils.jl")

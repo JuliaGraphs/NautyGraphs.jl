@@ -89,6 +89,8 @@ function DenseNautyGraph{D,W}(edge_list::Vector{<:AbstractEdge}; vertex_labels=n
 end
 DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(edge_list; vertex_labels)
 
+libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
+libnauty(::Type{DenseNautyGraph{D,W}}) where {D,W} = libnauty(W)
 
 Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g.labels), g.ne, g.hashval)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}

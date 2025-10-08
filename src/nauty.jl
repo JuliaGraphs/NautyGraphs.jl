@@ -1,7 +1,6 @@
 libnauty(::Type{UInt16}) = nauty_jll.libnautyTS
 libnauty(::Type{UInt32}) = nauty_jll.libnautyTW
 libnauty(::Type{UInt64}) = nauty_jll.libnautyTL
-libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
 
 mutable struct NautyOptions
     getcanon::Cint # Warning: setting getcanon to false means that nauty will NOT compute the canonical representative, which may lead to unexpected results.
@@ -102,7 +101,7 @@ function _nauty(g::SparseNautyGraph{D}, options::NautyOptions=default_options(g)
 end
 
 @generated function _ccall_nauty(g::DenseNautyGraph{D,W}, lab, ptn, orbits, options, statistics, canong) where {D,W}
-    return quote @ccall $(libnauty(W)).densenauty(
+    return quote @ccall $(libnauty(g)).densenauty(
         g.graphset.words::Ref{W},
         lab::Ref{Cint},
         ptn::Ref{Cint},
@@ -139,16 +138,22 @@ function _canonize!(g::DenseNautyGraph, canong::Graphset, canonperm)
     permute!(g.labels, canonperm)
     return
 end
-
+function _sethash!(g::SparseNautyGraph, canong::Graphset, canonperm)
+    # TODO
+    return
+end
+function _canonize!(g::SparseNautyGraph, canong::SparseNautyGraph, canonperm)
+    copy!(g, canong)
+    permute!(g.labels, canonperm)
+    return
+end
 
 """
     nauty(g::AbstractNautyGraph, [options::NautyOptions]; [canonize=false])
 
 Compute a graph `g`'s canonical form and automorphism group.
 """
-function nauty(::AbstractNautyGraph, ::NautyOptions; kwargs...) end
-
-function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false, compute_hash=true)
+function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); canonize=false, compute_hash=true)
     if is_directed(g) && !isone(options.digraph)
         error("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed.")
     end

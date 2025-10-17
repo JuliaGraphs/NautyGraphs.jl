@@ -8,19 +8,20 @@ mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
 end
 
 """
-    SparseNautyGraph{D}(n::Integer; [vertex_labels]) where {D}
+    SparseNautyGraph{D}(n::Integer; [vertex_labels, ne=n]) where {D}
 
 Construct a `SparseNautyGraph` on `n` vertices and 0 edges. 
 Can be directed (`D = true`) or undirected (`D = false`).
-Vertex labels can optionally be specified.
+Vertex labels can optionally be specified. If `ne` is provided, enough 
+memory for `ne` optimally packed edges is allocated.
 """
-function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing) where {D}
+function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     if !isnothing(vertex_labels) && n != length(vertex_labels)
         throw(ArgumentError("The number of vertices is not compatible with the length of `vertex_labels`."))
     end
     v = zeros(n)
     d = zeros(Cint, n)
-    e = -ones(Cint, n) # encode unused values as -1
+    e = -ones(Cint, ne) # encode unused values as -1
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, n)
     end
@@ -40,7 +41,7 @@ function SparseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D}
     isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
 
-    g = SparseNautyGraph{D}(n; vertex_labels)
+    g = SparseNautyGraph{D}(n; vertex_labels, ne=sum(isone, A))
     for i in axes(A, 1), j in axes(A, 2)
         A[i, j] != 0 && _add_directed_edge!(g, i, j)
     end
@@ -54,6 +55,7 @@ Construct a `SparseNautyGraph` from a vector of edges.
 The number of vertices is the highest that is used in an edge in `edge_list`.
 The graph can be directed (`D = true`) or undirected (`D = false`).
 Vertex labels can optionally be specified.
+To achieve optimal memory efficiency, it is recommended to sort the edge list beforehand.
 """
 function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D}
     nvg = 0
@@ -61,21 +63,32 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
         nvg = max(nvg, src(e), dst(e))
     end
 
-    # sort the edgelist to optimize the neighborlist packing
-    edge_list = sort(edge_list)
+    # sort edgelist to optimize neighborlist packing
+    # edge_list = sort(edge_list)
 
-    g = SparseNautyGraph{D}(nvg; vertex_labels)
+    g = SparseNautyGraph{D}(nvg; vertex_labels, ne=length(edge_list))
     for edge in edge_list
         add_edge!(g, edge)
     end
+    trim_edgelist!(g)
     return g
+end
+
+function (::Type{G})(g::AbstractGraph) where {G<:SparseNautyGraph}
+    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g), ne=ne(g)) : G(nv(g); ne=ne(g))
+    for v in vertices(g)
+        for n in neighbors(g, v)
+            _add_directed_edge!(ng, v, n)
+        end
+    end
+    return ng
 end
 
 libnauty(::SparseNautyGraph) = nauty_jll.libnautyTL
 libnauty(::Type{<:SparseNautyGraph}) = nauty_jll.libnautyTL
 
 # C-compatible representation of a sparsenautygraph
-mutable struct SparseGraphGraphRep
+mutable struct SparseGraphRep
     nde::Csize_t
     v::Ptr{Csize_t}
     nv::Cint
@@ -87,19 +100,24 @@ mutable struct SparseGraphGraphRep
     elen::Csize_t
     wlen::Csize_t
 end
-function Base.cconvert(::Type{Ref{SparseGraphGraphRep}}, sref::Ref{<:SparseNautyGraph})
+function SparseGraphRep()
+    return SparseGraphRep(0, C_NULL, 0, C_NULL, C_NULL, C_NULL, 0, 0, 0, 0)
+end
+
+function Base.cconvert(::Type{Ref{SparseGraphRep}}, sref::Ref{<:SparseNautyGraph})
     s = sref[]
-    cstr = SparseGraphGraphRep(s.nde, pointer(s.v), s.nv, pointer(s.d), pointer(s.e), C_NULL, length(s.v), length(s.d), length(s.e), 0)
+    cstr = SparseGraphRep(s.nde, pointer(s.v), s.nv, pointer(s.d), pointer(s.e), C_NULL, length(s.v), length(s.d), length(s.e), 0)
     return (s, cstr)
 end
-function Base.unsafe_convert(::Type{Ref{SparseGraphGraphRep}}, x::Tuple{<:SparseNautyGraph,SparseGraphGraphRep})
+function Base.unsafe_convert(::Type{Ref{SparseGraphRep}}, x::Tuple{<:SparseNautyGraph,SparseGraphRep})
     _, cstr = x
-    return convert(Ptr{SparseGraphGraphRep}, pointer_from_objref(cstr))
+    return convert(Ptr{SparseGraphRep}, pointer_from_objref(cstr))
 end
+
 @generated function sortlists!(g::SparseNautyGraph)
     # Sort the lists in the graph rep into some reference order
     return quote
-        @ccall $(libnauty(g)).sortlists_sg(Ref(g)::Ref{SparseGraphGraphRep})::Cvoid
+        @ccall $(libnauty(g)).sortlists_sg(Ref(g)::Ref{SparseGraphRep})::Cvoid
     end
 end
 
@@ -122,16 +140,22 @@ function Base.hash(g::SparseNautyGraph, h::UInt)
     return hash(g.labels, hash(vertices(g), hash(edges(g), h)))
 end
 
-function Base.:(==)(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1, D2}
-    return D1 == D2 && 
+@generated function Base.:(==)(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1, D2}
+    return quote D1 == D2 && 
     labels(g) == labels(h) && 
-    Bool(@ccall ll.aresame_sg(Ref(g)::Ref{SparseGraphGraphRep}, Ref(h)::Ref{SparseGraphGraphRep})::Cint)
+    Bool(@ccall $(libnauty(g)).aresame_sg(Ref(g)::Ref{SparseGraphRep}, Ref(h)::Ref{SparseGraphRep})::Cint)
+    end
 end
 
 Graphs.nv(g::SparseNautyGraph) = g.nv
 function Graphs.ne(g::SparseNautyGraph)
-    nv(g) == 0 && return 0
-    return is_directed(g) ? g.nde : (g.nde + sum(has_edge(g, i, i) for i in vertices(g))) ÷ 2
+    if nv(g) == 0
+        return 0
+    elseif is_directed(g)
+        return g.nde
+    else
+        return (g.nde + sum(has_edge(g, i, i) for i in vertices(g))) ÷ 2
+    end
 end
 Graphs.vertices(g::SparseNautyGraph) = Base.OneTo(g.nv)
 Graphs.has_vertex(g::SparseNautyGraph, v::Integer) = v ∈ vertices(g)
@@ -238,7 +262,6 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph}) = e2 == e1
-
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D
 Graphs.is_directed(::Type{SparseNautyGraph{D}}) where {D} = D
@@ -378,3 +401,20 @@ end
 Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, (i,))
 
 
+function _unsafe_sparsegraphcopy!(g::SparseNautyGraph, srep::SparseGraphRep)
+    copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
+    copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
+    copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
+    return
+end
+function _free_sparsegraph(srep::SparseGraphRep)
+    _sparsenautyfree(srep.e)
+    _sparsenautyfree(srep.v)
+    _sparsenautyfree(srep.d)
+    return
+end
+@generated function _sparsenautyfree(arr::Ptr{T}) where {T}
+    return quote
+        @ccall $(libnauty(SparseNautyGraph)).free(arr::Ptr{T})::Cvoid
+    end
+end

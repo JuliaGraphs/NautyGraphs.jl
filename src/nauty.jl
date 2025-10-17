@@ -93,7 +93,7 @@ end
 function _nauty(g::SparseNautyGraph{D}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D}
     lab, ptn = vertexlabels2labptn(g.labels)
     orbits = zeros(Cint, nv(g))
-    canong = SparseNautyGraph{D}(nv(g))
+    canong = SparseGraphRep()
 
     _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
     canonperm = (lab .+= 1)
@@ -113,14 +113,15 @@ end
         canong.words::Ref{W})::Cvoid end
 end
 @generated function _ccall_nauty(g::SparseNautyGraph, lab, ptn, orbits, options, statistics, canong)
-    return quote @ccall $(libnauty(g)).sparsenauty(
-        Ref(g)::Ref{SparseGraphGraphRep},
+    return quote 
+        @ccall $(libnauty(g)).sparsenauty(
+        Ref(g)::Ref{SparseGraphRep},
         lab::Ref{Cint},
         ptn::Ref{Cint},
         orbits::Ref{Cint},
         Ref(options)::Ref{NautyOptions},
         Ref(statistics)::Ref{NautyStatistics},
-        Ref(canong)::Ref{SparseGraphGraphRep})::Cvoid end
+        Ref(canong)::Ref{SparseGraphRep})::Cvoid end
 end
 
 function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm)
@@ -138,12 +139,12 @@ function _canonize!(g::DenseNautyGraph, canong::Graphset, canonperm)
     permute!(g.labels, canonperm)
     return
 end
-function _sethash!(g::SparseNautyGraph, canong::Graphset, canonperm)
+function _sethash!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
     # TODO
     return
 end
-function _canonize!(g::SparseNautyGraph, canong::SparseNautyGraph, canonperm)
-    copy!(g, canong)
+function _canonize!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
+    _unsafe_sparsegraphcopy!(g, canong)
     permute!(g.labels, canonperm)
     return
 end
@@ -168,6 +169,9 @@ function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); 
 
     compute_hash && _sethash!(g, canong, canonperm)
     canonize && _canonize!(g, canong, canonperm)
+    
+    # free memory allocated by nauty for sparse graphs
+    canong isa SparseGraphRep && _free_sparsegraph(canong)
     return canonperm, autg
 end
 

@@ -174,33 +174,52 @@ end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
 
 """
-    ghash(g::AbstractNautyGraph; [alg=XXHash64Alg()])
+    ghash([hash_fn::Function], g::AbstractNautyGraph)
 
 Compute a hash of the canonical version of `g`, meaning that `is_isomorphic(g1, g2) == true` implies `ghash(g1) == ghash(g2)`. The converse usually holds as well, 
 but in rare cases, hash collisions may cause non-isomorphic graphs to have the same hash. The likelihood of a hash collision occuring depends on the 
-chosen hashing algorithm, which can be specified via the `alg` keyword. Valid algorithm choices are:
+used hash function, which can optionally be specified via `hash_fn` (the required function signature is `hash_fn(x, h::UInt)`, the same as `Base.hash`).
+If no hash function is given, the graph hash is computed using a (not cryptographically secure) hash function from nauty.
 
-- `XXHash64Alg()`: The 64bit version of the xxHash algorithm (`XXH3_64bits`). Fast and resistant against collisions, but not cryptographically secure. 
-See (xxHash)[https://xxhash.com] for more details on collision resistance. This is the default option.
-- `XXHash128Alg()`: The 128bit version of the xxHash algorithm (`XXH3_128bits`). Slightly slower than the 64bit xxHash, resistant against collisions, but not cryptographically secure.
-See the (xxHash)[https://xxhash.com] for more details on collision resistance.
-- `SHA64Alg()`: The first 64bits of the SHA256 hash. Slow but cryptographically secure. Consider using `SHA128Alg()` instead, since the 128bit version runs at the same speed.
-- `SHA128Alg()`: The first 128bits of the SHA256 hash. Slow but cryptographically secure.
-- `Base64Alg()`: The built-in Julia hash function `Base.hash`. Fast, but not secure against collisions, so __use with caution__! 
-It is strongly recommended to use `XXHash64Alg()` instead. Cannot hash graphs with more than `√8192 ≈ 90` vertices.
+!!! warning "Warning"
+The default hash algorithm choice is not cryptographically secure and thus may lead to hash collisions. If you need high collision resistance, please pass a custom `hash_fn`
+with suitable security properties.
 
 !!! warning "Warning"
 __Using different hashing algorithms will result in different hash values__. Before you compare different graph hashes, you have to 
 ensure that the hashes were computed with the same algorithm, or you will get meaningless results.
 """
-function ghash(::AbstractNautyGraph; alg=XXHash64Alg()::AbstractHashAlg) end
-
-function ghash(g::DenseNautyGraph; alg=XXHash64Alg()::AbstractHashAlg)
+function ghash(g::DenseNautyGraph)
     if iscanon(g)
-        return _ghash(g.graphset, g.labels; alg)
+        return _sethash_dense(g.graphset, hash(g.labels))
     else
         canong, canonperm, _ = _densenauty(g)
-        return _ghash(canong, @view g.labels[canonperm]; alg)
+        return _sethash_dense(canong, hash(@view g.labels[canonperm]))
     end
     return h
+end
+function ghash(hash_fn::Function, g::DenseNautyGraph)
+    if iscanon(g)
+        return _sethash_dense(hash_fn, g.graphset, hash_fn(g.labels))
+    else
+        canong, canonperm, _ = _densenauty(g)
+        labs = hash_fn === Base.hash ? @view(g.labels[canonperm]) : g.labels[canonperm]
+        return _sethash_dense(hash_fn, canong, hash_fn(labs))
+    end
+    return h
+end
+
+@generated function _sethash_dense(gset::Graphset{W}, h::UInt=zero(UInt)) where {W}
+    return quote hashlong = @ccall $(libnauty(W)).hashgraph(
+        gset.words::Ref{W},
+        gset.m::Cint,
+        gset.n::Cint,
+        reinterpret(Clong, h)::Clong)::Clong 
+        return reinterpret(UInt, hashlong)
+    end
+end
+function _sethash_dense(hash_fn::Function, gset::Graphset, h::UInt=zero(UInt))
+    # not all hash functions give the same result on iterators and allocated arrays
+    # to ensure compatiblility, we have to allocate here
+    return hash_fn(collect(active_words(gset)), h)
 end

@@ -10,7 +10,6 @@ abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
 
 include("utils.jl")
 include("graphset.jl")
-include("hashing.jl")
 include("densenautygraph.jl")
 include("nauty.jl")
 
@@ -38,6 +37,5 @@ export
     canonical_permutation,
     is_isomorphic,
     ≃,
-    ghash,
-    AbstractHashAlg, XXHash64Alg, XXHash128Alg, SHA64Alg, SHA128Alg, Base64Alg
+    ghash
 end

@@ -155,11 +155,8 @@
 
     # Test that ghash doesnt error for large graphs
     glarge = NautyGraph(200)
-    ghash(glarge; alg=XXHash64Alg())
-    ghash(glarge; alg=XXHash128Alg())
-    ghash(glarge; alg=SHA64Alg())
-    ghash(glarge; alg=SHA128Alg())
-    @test_throws ArgumentError ghash(glarge; alg=Base64Alg())
+    ghash(glarge)
+    ghash(Base.hash, glarge)
 
     g6 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
     nauty(g6; canonize=false)
@@ -170,6 +167,7 @@
 
     @test iscanon(g7)
     @test ghash(g6) == ghash(g7)
+    @test ghash(Base.hash, g6) == ghash(Base.hash, g7)
 
     g8 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
     @test !iscanon(g8)

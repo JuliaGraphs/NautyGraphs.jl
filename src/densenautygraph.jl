@@ -53,7 +53,7 @@ function DenseNautyGraph{D,W}(A::AbstractMatrix; vertex_labels=nothing) where {D
 end
 DenseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(A; vertex_labels)
 
-function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
+function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
     ng = G(nv(g))
     for e in edges(g)
         add_edge!(ng, e)
@@ -61,7 +61,7 @@ function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
     end
     return ng
 end
-function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
+function (::Type{G})(g::AbstractNautyGraph) where {G<:DenseNautyGraph}
     h = invoke(G, Tuple{AbstractGraph}, g)
     @views h.labels .= g.labels
     h.iscanon = g.iscanon

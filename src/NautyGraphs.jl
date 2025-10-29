@@ -10,6 +10,7 @@ abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
 include("utils.jl")
 include("graphset.jl")
 include("densenautygraph.jl")
+include("canongraph.jl")
 include("nauty.jl")
 
 const NautyGraph = DenseNautyGraph{false}
@@ -28,6 +29,7 @@ export
     NautyGraph,
     NautyDiGraph,
     DenseNautyGraph,
+    CanonGraph,
     AutomorphismGroup,
     labels,
     iscanon,

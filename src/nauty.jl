@@ -144,7 +144,7 @@ function _sethash!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
     return
 end
 function _canonize!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
-    _unsafe_sparsegraphcopy!(g, canong)
+    _unsafe_copyfromsparsegraphrep!(g, canong)
     permute!(g.labels, canonperm)
     return
 end
@@ -171,7 +171,7 @@ function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); 
     canonize && _canonize!(g, canong, canonperm)
     
     # free memory allocated by nauty for sparse graphs
-    canong isa SparseGraphRep && _free_sparsegraph(canong)
+    canong isa SparseGraphRep && _free_sparsegraphrep(canong)
     return canonperm, autg
 end
 
@@ -192,7 +192,7 @@ end
 """
     canonical_permutation(g::AbstractNautyGraph)
 
-Return the permutation `p` needed to canonize `g`. This permutation satisfies `g[p] = canong`.
+Return the permutation `p` needed to canonize `g`. This permutation satisfies `g[p] == canong`.
 """
 function canonical_permutation(::AbstractNautyGraph) end
 

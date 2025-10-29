@@ -401,13 +401,13 @@ end
 Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, (i,))
 
 
-function _unsafe_sparsegraphcopy!(g::SparseNautyGraph, srep::SparseGraphRep)
+function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphRep)
     copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
     copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
     copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
     return
 end
-function _free_sparsegraph(srep::SparseGraphRep)
+function _free_sparsegraphrep(srep::SparseGraphRep)
     _sparsenautyfree(srep.e)
     _sparsenautyfree(srep.v)
     _sparsenautyfree(srep.d)

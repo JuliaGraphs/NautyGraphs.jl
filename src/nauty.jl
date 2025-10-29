@@ -182,13 +182,15 @@ used hash function, which can optionally be specified via `hash_fn` (the require
 If no hash function is given, the graph hash is computed using a (not cryptographically secure) hash function from nauty.
 
 !!! warning "Warning"
-The default hash algorithm choice is not cryptographically secure and thus may lead to hash collisions. If you need high collision resistance, please pass a custom `hash_fn`
-with suitable security properties.
+    The default hash algorithm choice is not cryptographically secure and thus may lead to hash collisions. If you need high collision resistance, please pass a custom `hash_fn`
+    with suitable security properties.
 
 !!! warning "Warning"
-__Using different hashing algorithms will result in different hash values__. Before you compare different graph hashes, you have to 
-ensure that the hashes were computed with the same algorithm, or you will get meaningless results.
+    Using different hashing algorithms will result in different hash values. Before you compare different graph hashes, you have to 
+    ensure that the hashes were computed with the same algorithm, or you will get meaningless results.
 """
+function ghash end
+
 function ghash(g::DenseNautyGraph)
     if iscanon(g)
         return _sethash_dense(g.graphset, hash(g.labels))
@@ -219,7 +221,7 @@ end
     end
 end
 function _sethash_dense(hash_fn::Function, gset::Graphset, h::UInt=zero(UInt))
-    # not all hash functions give the same result on iterators and allocated arrays
+    # not all hash functions give the same result on (lazy) iterators and allocated arrays
     # to ensure compatiblility, we have to allocate here
     return hash_fn(collect(active_words(gset)), h)
 end

@@ -1,11 +1,11 @@
-# Quick and dirty hash function for testing
+# Hash function for testing
 function SHAhash(x)
     io = IOBuffer()
     Serialization.serialize(io, x)
     return SHA.sha256(take!(io))
 end
 SHAhash64(x) = reinterpret(UInt64, SHAhash(x))[1]
-SHAhash64(x, h::UInt) = SHAhash64((x, h)) # don't do this at home
+SHAhash64(x, h::UInt) = SHAhash64((x, h))
 
 @testset "hashing" begin
     g = Graphset{UInt}(20)
@@ -32,7 +32,7 @@ SHAhash64(x, h::UInt) = SHAhash64((x, h)) # don't do this at home
     add_edge!(g, 8, 3)
 
     h = copy(g)[[1, 4, 3, 2, 5, 6, 8, 7]]
-    
+
     k = NautyDiGraph(8; vertex_labels=[1, 2, 2, 6, 4, 4, 5, 5])
     add_edge!(g, 1, 5)
     add_edge!(g, 4, 2)

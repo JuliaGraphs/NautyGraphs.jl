@@ -3,7 +3,6 @@ module NautyGraphs
 using Graphs, LinearAlgebra
 using Graphs.SimpleGraphs: SimpleEdgeIter
 import nauty_jll
-import xxHash_jll, SHA, Serialization
 
 const Cbool = Cint
 abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end

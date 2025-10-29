@@ -1,5 +1,5 @@
 rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
-symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); A[i, i] = 0; end; A)
+symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1); end; A)
 
 @testset "densenautygraph" begin
     nverts = [1, 2, 3, 4, 5, 10, 20, 31, 32, 33, 50, 63, 64, 
@@ -24,12 +24,16 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         @test adjacency_matrix(g) == adjacency_matrix(ng)
         @test edges(ng) == edges(g)
         @test collect(edges(g)) == collect(edges(ng))
+        @test nv(g) == nv(ng)
+        @test ne(g) == ne(ng)
 
         rv = sort(unique(rand(rng, 1:nv(ng), 4)))
 
         rem_vertices!(g, rv, keep_order=true)
         rem_vertices!(ng, rv)
         @test adjacency_matrix(g) == adjacency_matrix(ng)
+        @test nv(g) == nv(ng)
+        @test ne(g) == ne(ng)
     end
 
     for (g, ng) in zip(gs, ngs)
@@ -42,6 +46,8 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
             rem_edge!(g, edge)
             rem_edge!(ng, edge)
             @test adjacency_matrix(g) == adjacency_matrix(ng)
+            @test nv(g) == nv(ng)
+            @test ne(g) == ne(ng)
         end
     end
 
@@ -64,6 +70,41 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         add_edge!(ng, 1, 2)
         @test adjacency_matrix(g) == adjacency_matrix(ng)
     end
+
+    # LOOPS
+    g_loop0 = Graph([1 0 0; 0 1 0; 0 0 0])
+    ng_loop0 = NautyGraph([1 0 0; 0 1 0; 0 0 0])
+
+    @test ne(g_loop0) == ne(ng_loop0)
+
+    add_edge!(g_loop0, 1, 2)
+    add_edge!(ng_loop0, 1, 2)
+    @test ne(ng_loop0) == ne(g_loop0)
+
+    rem_vertex!(g_loop0, 3)
+    rem_vertex!(ng_loop0, 3)
+    @test ne(ng_loop0) == ne(g_loop0)
+
+    rem_edge!(g_loop0, 1, 2)
+    rem_edge!(ng_loop0, 1, 2)
+    @test ne(ng_loop0) == ne(g_loop0)
+
+    g_diloop0 = DiGraph([1 0 0; 0 1 0; 0 0 0])
+    ng_diloop0 = NautyDiGraph([1 0 0; 0 1 0; 0 0 0])
+
+    @test ne(g_diloop0) == ne(ng_diloop0)
+
+    add_edge!(g_diloop0, 1, 2)
+    add_edge!(ng_diloop0, 1, 2)
+    @test ne(ng_diloop0) == ne(g_diloop0)
+
+    rem_vertex!(g_diloop0, 3)
+    rem_vertex!(ng_diloop0, 3)
+    @test ne(ng_diloop0) == ne(g_diloop0)
+
+    rem_edge!(g_diloop0, 1, 2)
+    rem_edge!(ng_diloop0, 1, 2)
+    @test ne(ng_diloop0) == ne(g_diloop0)
 
     g_loop = Graph(2)
     ng_loop = NautyGraph(2)
@@ -120,6 +161,9 @@ symmetrize_adjmx(A) = (A = convert(typeof(A), (A + A') .> 0); for i in axes(A, 1
         @test outdegree(rand_g, vertex) == length(outneighbors(rand_g, vertex))
         @test indegree(rand_g, vertex) == length(inneighbors(rand_g, vertex))
     end
+
+    @test has_edge(rand_g, 1, 71) == false
+    @test has_edge(rand_g, 75, 5) == false
 
     es = [Edge(1, 2), Edge(2, 3), Edge(2, 4)]
     g = NautyDiGraph(4)

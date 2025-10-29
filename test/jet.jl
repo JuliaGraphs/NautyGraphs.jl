@@ -28,4 +28,9 @@ using JET
 
    @test_opt target_modules=(NautyGraphs,) nauty(g)
    @test_opt target_modules=(NautyGraphs,) canonize!(g)
+   @test_opt target_modules=(NautyGraphs,) ghash(g; alg=XXHash64Alg())
+   @test_opt target_modules=(NautyGraphs,) ghash(g; alg=XXHash128Alg())
+   @test_opt target_modules=(NautyGraphs,) ghash(g; alg=SHA64Alg())
+   @test_opt target_modules=(NautyGraphs,) ghash(g; alg=SHA128Alg())
+   @test_opt target_modules=(NautyGraphs,) ghash(g; alg=Base64Alg())
 end

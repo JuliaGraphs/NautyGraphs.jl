@@ -47,24 +47,23 @@ The graph can be directed (`D = true`) or undirected (`D = false`). If `D = fals
 Vertex labels can optionally be specified.
 """
 function DenseNautyGraph{D,W}(A::AbstractMatrix; vertex_labels=nothing) where {D,W<:Unsigned}
+    n, m = size(A)
+    isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
     graphset = Graphset{W}(A)
     return DenseNautyGraph{D}(graphset; vertex_labels)
 end
 DenseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(A; vertex_labels)
 
-function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
-    ng = G(nv(g))
+function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
+    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g)) : G(nv(g))
     for e in edges(g)
         add_edge!(ng, e)
-        !is_directed(g) && is_directed(ng) && add_edge!(ng, reverse(e))
+        if !is_directed(g) && is_directed(ng)
+            add_edge!(ng, reverse(e))
+        end
     end
     return ng
-end
-function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
-    h = invoke(G, Tuple{AbstractGraph}, g)
-    @views h.labels .= g.labels
-    return h
 end
 
 """

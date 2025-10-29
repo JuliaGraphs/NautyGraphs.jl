@@ -16,6 +16,11 @@ SHAhash64(x, h::UInt) = SHAhash64((x, h))
     @test _sethash_dense(g) == _sethash_dense(h)
     @test _sethash_dense(Base.hash, g) == _sethash_dense(Base.hash, h)
     @test _sethash_dense(SHAhash64, g) == _sethash_dense(SHAhash64, h)
+
+    # test with key
+    @test _sethash_dense(g, UInt(35)) == _sethash_dense(h, UInt(35))
+    @test _sethash_dense(Base.hash, g, UInt(35)) == _sethash_dense(Base.hash, h, UInt(35))
+    @test _sethash_dense(SHAhash64, g, UInt(35)) == _sethash_dense(SHAhash64, h, UInt(35))
     
     k = copy(g)
     increase_padding!(k, 1)

@@ -169,6 +169,9 @@
     @test ghash(g6) == ghash(g7)
     @test ghash(Base.hash, g6) == ghash(Base.hash, g7)
 
+    @test ghash(g6, UInt(2564)) == ghash(g7, UInt(2564))
+    @test ghash(Base.hash, g6, UInt(2564)) == ghash(Base.hash, g7, UInt(2564))
+
     g8 = NautyDiGraph([Edge(2, 1), Edge(3, 1), Edge(1, 4)])
     @test !iscanon(g8)
     canonize!(g8)

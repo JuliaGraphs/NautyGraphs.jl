@@ -174,7 +174,7 @@ end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
 
 """
-    ghash([hash_fn::Function], g::AbstractNautyGraph)
+    ghash([hash_fn::Function], g::AbstractNautyGraph[, h::UInt])
 
 Compute a hash of the canonical version of `g`, meaning that `is_isomorphic(g1, g2) == true` implies `ghash(g1) == ghash(g2)`. The converse usually holds as well, 
 but in rare cases, hash collisions may cause non-isomorphic graphs to have the same hash. The likelihood of a hash collision occuring depends on the 
@@ -191,22 +191,22 @@ If no hash function is given, the graph hash is computed using a (not cryptograp
 """
 function ghash end
 
-function ghash(g::DenseNautyGraph)
+function ghash(g::DenseNautyGraph, h::UInt=zero(UInt))
     if iscanon(g)
-        return _sethash_dense(g.graphset, hash(g.labels))
+        return _sethash_dense(g.graphset, hash(g.labels, h))
     else
         canong, canonperm, _ = _densenauty(g)
-        return _sethash_dense(canong, hash(@view g.labels[canonperm]))
+        return _sethash_dense(canong, hash(@view(g.labels[canonperm]), h))
     end
     return h
 end
-function ghash(hash_fn::Function, g::DenseNautyGraph)
+function ghash(hash_fn::Function, g::DenseNautyGraph, h::UInt=zero(UInt))
     if iscanon(g)
-        return _sethash_dense(hash_fn, g.graphset, hash_fn(g.labels))
+        return _sethash_dense(hash_fn, g.graphset, hash_fn(g.labels, h))
     else
         canong, canonperm, _ = _densenauty(g)
         labs = hash_fn === Base.hash ? @view(g.labels[canonperm]) : g.labels[canonperm]
-        return _sethash_dense(hash_fn, canong, hash_fn(labs))
+        return _sethash_dense(hash_fn, canong, hash_fn(labs, h))
     end
     return h
 end

@@ -40,8 +40,8 @@ Base.size(gset::Graphset) = (gset.n, gset.n)
 Base.IndexStyle(::Type{Graphset}) = IndexCartesian()
 Base.similar(gset::Graphset{W}) where {W} = Graphset{W}(gset.n, gset.m)
 
-Base.hash(gset::Graphset, h::UInt=zero(UInt)) = _sethash_dense(gset, h)
-@generated function _sethash_dense(gset::Graphset{W}, h::UInt=zero(UInt)) where {W}
+Base.hash(gset::Graphset, h::UInt=zero(UInt)) = _graphsethash(gset, h)
+@generated function _graphsethash(gset::Graphset{W}, h::UInt=zero(UInt)) where {W}
     return quote hashlong = @ccall $(libnauty(W)).hashgraph(
         gset.words::Ref{W},
         gset.m::Cint,

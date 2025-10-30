@@ -171,4 +171,27 @@
     @test !iscanon(g8)
     canonize!(g8)
     @test iscanon(g8)
+
+
+    # Test filtering via canonize! and Sets
+    g1 = NautyGraph(5)
+    add_edge!(g1, 1, 2)
+    
+    g2 = NautyGraph(5)
+    add_edge!(g2, 3, 4)
+    
+    g3 = NautyGraph(6)
+
+    s1 = Set([g1, g2, g3])
+    @test length(s1) == 3
+
+    canonize!(g1)
+    canonize!(g2)
+    canonize!(g3)
+
+    s2 = Set([g1, g2, g3])
+    @test length(s2) == 2
+    @test g1 in s2
+    @test g2 in s2
+    @test g3 in s2
 end

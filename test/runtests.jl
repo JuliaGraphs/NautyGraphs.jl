@@ -1,10 +1,9 @@
 using NautyGraphs, Graphs
-using NautyGraphs: Graphset, _sethash_dense, increase_padding!
+using NautyGraphs: Graphset, increase_padding!
 using Test
 using Random, LinearAlgebra
 using Base.Threads
 using Serialization, SHA
-
 
 @testset verbose=true "NautyGraphs" begin
     include("densenautygraph.jl")

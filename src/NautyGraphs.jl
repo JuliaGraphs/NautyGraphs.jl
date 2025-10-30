@@ -3,6 +3,7 @@ module NautyGraphs
 using Graphs, LinearAlgebra
 using Graphs.SimpleGraphs: SimpleEdgeIter
 import nauty_jll
+import SHA
 
 const Cbool = Cint
 abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
@@ -36,5 +37,5 @@ export
     canonical_permutation,
     is_isomorphic,
     ≃,
-    ghash
+    canonical_id
 end

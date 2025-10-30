@@ -9,7 +9,6 @@ using Serialization, SHA
 @testset verbose=true "NautyGraphs" begin
     include("densenautygraph.jl")
     include("nauty.jl")
-    include("hashing.jl")
     include("graphset.jl")
     VERSION >= v"1.9-" && include("interface.jl")
     include("aqua.jl")

@@ -40,6 +40,25 @@ Base.size(gset::Graphset) = (gset.n, gset.n)
 Base.IndexStyle(::Type{Graphset}) = IndexCartesian()
 Base.similar(gset::Graphset{W}) where {W} = Graphset{W}(gset.n, gset.m)
 
+Base.hash(gset::Graphset, h::UInt=zero(UInt)) = _sethash_dense(gset, h)
+@generated function _sethash_dense(gset::Graphset{W}, h::UInt=zero(UInt)) where {W}
+    return quote hashlong = @ccall $(libnauty(W)).hashgraph(
+        gset.words::Ref{W},
+        gset.m::Cint,
+        gset.n::Cint,
+        reinterpret(Clong, h)::Clong)::Clong 
+        return reinterpret(UInt, hashlong)
+    end
+end
+
+@inline function active_words(gset::Graphset{W}) where {W}
+    # Return the words actually used for representing the matrix, without any unnecessary padding
+    m_eff = cld(gset.n, wordsize(W))
+    return (gset.words[(i - 1) * gset.m + j] for j in 1:m_eff for i in 1:gset.n)
+end
+# if both graphsets have the same word type, we can directly compare words; otherwise, we fall back to elementwise compare
+Base.:(==)(gs1::Graphset{W}, gs2::Graphset{W}) where {W} = all(w1 == w2 for (w1, w2) in zip(active_words(gs1), active_words(gs2)))
+
 function Base.copy!(dest::Graphset, src::Graphset)
     dest.n = src.n
     dest.m = src.m
@@ -101,12 +120,6 @@ end
     wordidx, bitidx = bitaddress(gset, i, j)
     gset.words[wordidx] = setbit(gset.words[wordidx], convert(Bool, x), bitidx)
     return gset
-end
-
-@inline function active_words(gset::Graphset{W}) where {W}
-    # Return the words actually used for representing the graph, without any unnecessary padding
-    m_eff = cld(gset.n, wordsize(W))
-    return (gset.words[(i - 1) * gset.m + j] for j in 1:m_eff for i in 1:gset.n)
 end
 
 function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}

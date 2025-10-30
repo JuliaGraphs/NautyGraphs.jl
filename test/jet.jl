@@ -28,6 +28,5 @@ using JET
 
    @test_opt target_modules=(NautyGraphs,) nauty(g)
    @test_opt target_modules=(NautyGraphs,) canonize!(g)
-   @test_opt target_modules=(NautyGraphs,) ghash(g)
-   @test_opt target_modules=(NautyGraphs,) ghash(Base.hash, g)
+   @test_opt target_modules=(NautyGraphs,) canonical_id(g)
 end

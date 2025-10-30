@@ -16,6 +16,10 @@ function CanonGraph(g::AbstractGraph)
     grep = is_directed(g) ? NautyDiGraph(g) : NautyGraph(g)
     return CanonGraph{typeof(grep)}(grep; copy_graph=false)
 end
+function CanonGraph(args...; directed=false, sparse=false, kwargs...)
+    # sparse not used yet
+    return CanonGraph(DenseNautyGraph{directed}(args...; kwargs...))
+end
 
 
 Base.copy(g::CanonGraph{G}) where {G} = CanonGraph{G}(copy(g.g))
@@ -24,7 +28,7 @@ function Base.copy!(dest::CanonGraph{G}, src::CanonGraph{G}) where {G}
     return dest
 end
 
-Base.show(io::Core.IO, g::CanonGraph) = print(io, "{$(nv(g)), $(ne(g))} CanonGraph")
+Base.show(io::Core.IO, g::CanonGraph{G}) where {G} = is_directed(G) ? print(io, "{$(nv(g)), $(ne(g))} directed canonical graph") : print(io, "{$(nv(g)), $(ne(g))} canonical graph")
 
 Base.hash(g::CanonGraph, h::UInt) = ghash(g.g, h)
 Base.:(==)(g::CanonGraph, h::CanonGraph) = g.g == h.g # we always canonize the underlying graph, meaning we do not need to check for isomorphism here explicitly
@@ -46,9 +50,9 @@ Graphs.edgetype(g::CanonGraph) = edgetype(g.g)
 Base.eltype(g::CanonGraph) = eltype(g.g)
 Base.zero(g::CanonGraph) = zero(g.g)
 Base.zero(::Type{CanonGraph{G}}) where {G} = zero(G)
-Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{<:Integer}) = let (g,perm) = induced_subgraph(g.g, iter); CanonGraph(g), perm end
-Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{Bool}) = let (g,perm) = induced_subgraph(g.g, iter); CanonGraph(g), perm end
-Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{<:AbstractEdge}) = let (g,perm) = induced_subgraph(g.g, iter); CanonGraph(g), perm end
+Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{<:Integer}) = let (g,perm)=induced_subgraph(g.g, iter); CanonGraph(g), perm end
+Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{Bool}) = let (g,perm)=induced_subgraph(g.g, iter); CanonGraph(g), perm end
+Graphs.induced_subgraph(g::CanonGraph, iter::AbstractVector{<:AbstractEdge}) = let (g,perm)=induced_subgraph(g.g, iter); CanonGraph(g), perm end
 # GRAPH MODIFY METHODS
 Graphs.add_edge!(g::CanonGraph, e::Edge) = let res=add_edge!(g.g, e); canonize!(g.g); res end
 Graphs.add_edge!(g::CanonGraph, i::Integer, j::Integer) = add_edge!(g, edgetype(g)(i, j))

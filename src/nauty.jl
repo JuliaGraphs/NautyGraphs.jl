@@ -103,31 +103,14 @@ end
         canong.words::Ref{W})::Cvoid end
 end
 
-function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm)
-    # Base.hash skips elements in arrays of length >= 8192
-    # Use SHA in these cases
-    canong_hash = length(canong) >= 8192 ? hash_sha(canong) : hash(canong)
-    labels_hash = @views length(g.labels) >= 8192 ? hash_sha(g.labels[canonperm]) : hash(g.labels[canonperm])
-
-    hashval = hash(labels_hash, canong_hash)
-    g.hashval = hashval
-    return
-end
-function _canonize!(g::DenseNautyGraph, canong::Graphset, canonperm)
-    copy!(g.graphset, canong)
-    permute!(g.labels, canonperm)
-    return
-end
-
-
 """
-    nauty(g::AbstractNautyGraph, [options::NautyOptions]; [canonize=false])
+    nauty(g::AbstractNautyGraph, [options::NautyOptions; canonize=false])
 
 Compute a graph `g`'s canonical form and automorphism group.
 """
 function nauty(::AbstractNautyGraph, ::NautyOptions; kwargs...) end
 
-function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false, compute_hash=true)
+function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
         error("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed.")
     end
@@ -140,33 +123,39 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
     # generators = Vector{Cint}[] # TODO: extract generators from nauty call
     autg = AutomorphismGroup(statistics.grpsize1 * 10^statistics.grpsize2, orbits)
 
-    compute_hash && _sethash!(g, canong, canonperm)
-    canonize && _canonize!(g, canong, canonperm)
+    canonize && _copycanon!(g, canong, canonperm)
     return canonperm, autg
 end
 
 """
     canonize!(g::AbstractNautyGraph)
 
-Reorder `g`'s vertices to be in canonical order. Returns the permutation `p` used to canonize `g`.
+Reorder `g`'s vertices into canonical order and return the permutation used.
 """
 function canonize!(::AbstractNautyGraph) end
 
 function canonize!(g::DenseNautyGraph)
+    iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
     canong, canonperm, _ = _densenauty(g)
-    _sethash!(g, canong, canonperm)
-    _canonize!(g, canong, canonperm)
+    _copycanon!(g, canong, canonperm)
     return canonperm
+end
+function _copycanon!(g, canong, canonperm)
+    copy!(g.graphset, canong)
+    permute!(g.labels, canonperm)
+    g.iscanon = true
+    return
 end
 
 """
     canonical_permutation(g::AbstractNautyGraph)
 
-Return the permutation `p` needed to canonize `g`. This permutation satisfies `g[p] = canong`.
+Return the permutation `p` needed to canonize `g`, meaning that `g[p]` is canonical.
 """
 function canonical_permutation(::AbstractNautyGraph) end
 
 function canonical_permutation(g::DenseNautyGraph)
+    iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
     _, canonperm, _ = _densenauty(g)
     return canonperm
 end
@@ -179,27 +168,34 @@ Check whether two graphs `g` and `h` are isomorphic to each other by comparing t
 function is_isomorphic(::AbstractNautyGraph, ::AbstractNautyGraph) end
 
 function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
+    iscanon(g) && iscanon(h) && return g == h
     canong, permg, _ = _densenauty(g)
     canonh, permh, _ = _densenauty(h)
     return canong == canonh && view(g.labels, permg) == view(h.labels, permh)
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
 
-
 """
-    ghash(g::AbstractNautyGraph)
+    canonical_id(g::AbstractNautyGraph)
 
-Hash the canonical version of `g`, so that (up to hash collisions) `ghash(g1) == ghash(g2)` implies `is_isomorphic(g1, g2) == true`.
-Hashes are computed using `Base.hash` for small graphs (nv < 8192), or using the first 64 bits of `sha256` for larger graphs.
+Hash the canonical version of `g`, using the first 128 bits returned by the SHA256 algorithm.
+
+The canonical id has the property that `is_isomorphic(g1, g2) == true` implies `canonical_id(g1) == canonical_id(g2)`. The converse usually holds as well, 
+but in very rare cases, hash collisions may cause non-isomorphic graphs to have the same canonical id. 
 """
-function ghash(::AbstractNautyGraph) end
+function canonical_id end
 
-function ghash(g::DenseNautyGraph)
-    if !isnothing(g.hashval)
-        return g.hashval
+function canonical_id(g::DenseNautyGraph)
+    if iscanon(g)
+        return _SHAhash(g.graphset, g.labels)
+    else
+        canong, canonperm, _ = _densenauty(g)
+        return _SHAhash(canong, @view g.labels[canonperm])
     end
+end
 
-    canong, canonperm, _ = _densenauty(g)
-    _sethash!(g, canong, canonperm)
-    return g.hashval
+function _SHAhash(x...)
+    io = IOBuffer()
+    write(io, (htol(x) for x in x)...)
+    return reinterpret(UInt128, SHA.sha256(take!(io)))[1]
 end

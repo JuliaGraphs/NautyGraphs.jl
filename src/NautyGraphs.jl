@@ -1,12 +1,11 @@
 module NautyGraphs
 
-using Graphs, LinearAlgebra, SHA
+using Graphs, LinearAlgebra
 using Graphs.SimpleGraphs: SimpleEdgeIter
 import nauty_jll
+import SHA
 
 const Cbool = Cint
-const HashType = UInt
-
 abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
 
 include("utils.jl")
@@ -32,10 +31,11 @@ export
     DenseNautyGraph,
     AutomorphismGroup,
     labels,
+    iscanon,
     nauty,
     canonize!,
     canonical_permutation,
     is_isomorphic,
     ≃,
-    ghash
+    canonical_id
 end

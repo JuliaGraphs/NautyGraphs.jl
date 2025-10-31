@@ -2,6 +2,7 @@
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 nauty_jll = "55c6dc9b-343a-50ca-8ff2-b71adb3733d5"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Interfaces = "85a1e053-f937-4924-92a5-1367d23b7b87"

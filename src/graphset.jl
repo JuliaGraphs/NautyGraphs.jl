@@ -75,6 +75,7 @@ end
 @inline wordsize(u::Unsigned) = 8 * sizeof(u)
 @inline wordsize(T::Type{<:Unsigned}) = 8 * sizeof(T)
 @inline wordsize(::Graphset{W}) where {W} = wordsize(W)
+@inline logwordsize(::Type{UInt8}) = 3
 @inline logwordsize(::Type{UInt16}) = 4
 @inline logwordsize(::Type{UInt32}) = 5
 @inline logwordsize(::Type{UInt64}) = 6

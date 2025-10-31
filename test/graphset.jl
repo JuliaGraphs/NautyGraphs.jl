@@ -1,7 +1,5 @@
 using NautyGraphs: active_words
 
-rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
-
 function test_graphsets(A; mfacts)
     n, _ = size(A)
     for mf in mfacts

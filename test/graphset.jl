@@ -34,4 +34,12 @@ end
     NautyGraphs._rem_vertex!(gs2, 1)
 
     @test gs1 != gs2
+
+    gs4 = Graphset{UInt64}(3, 2)
+    gs5 = Graphset{UInt64}(3, 2)
+
+    NautyGraphs._rem_vertex!(gs4, 2)
+    NautyGraphs._add_vertex!(gs4)
+
+    @test gs4 == gs5
 end

@@ -37,7 +37,8 @@ export
     inneighbors, outneighbors,
     neighbors,
     is_directed,
-    edgetype
+    edgetype,
+    Edge
 
 export
     AbstractNautyGraph,

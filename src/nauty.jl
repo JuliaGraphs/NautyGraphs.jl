@@ -140,6 +140,20 @@ function canonize!(g::DenseNautyGraph)
     _copycanon!(g, canong, canonperm)
     return canonperm
 end
+
+"""
+    canonize(g::AbstractNautyGraph)
+
+Canonize a copy of `g` and return the copy and canonical permutation.
+"""
+function canonize(::AbstractNautyGraph) end
+
+function canonize(g::DenseNautyGraph)
+    h = copy(g)
+    perm = canonize!(h)
+    return h, perm
+end
+
 function _copycanon!(g, canong, canonperm)
     copy!(g.graphset, canong)
     permute!(g.labels, canonperm)

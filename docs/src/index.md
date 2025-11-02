@@ -10,7 +10,7 @@ pkg> add NautyGraphs
 ## Basic Usage
 NautyGraphs.jl defines the `NautyGraph` or `NautyDiGraph` graph formats, which can be constructed and modified in the same way as regular `Graphs` from Graphs.jl:
 ```jldoctest intro; output=false
-using NautyGraphs, Graphs
+using NautyGraphs
 
 A = [0 1 0 0;
      1 0 1 1;

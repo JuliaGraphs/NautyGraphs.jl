@@ -25,6 +25,21 @@ function __init__()
 end
 
 export
+    add_edge!,
+    rem_edge!,
+    add_vertex!,
+    add_vertices!,
+    rem_vertex!,
+    rem_vertices!,
+    nv, ne, 
+    vertices, edges,
+    has_vertex, has_edge,
+    inneighbors, outneighbors,
+    neighbors,
+    is_directed,
+    edgetype
+
+export
     AbstractNautyGraph,
     NautyGraph,
     NautyDiGraph,
@@ -34,8 +49,9 @@ export
     iscanon,
     nauty,
     canonize!,
+    canonize,
     canonical_permutation,
+    canonical_id,
     is_isomorphic,
-    ≃,
-    canonical_id
+    ≃
 end

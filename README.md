@@ -47,12 +47,12 @@ julia> canonize!(h)
 julia> adjacency_matrix(g) == adjacency_matrix(h)
 true
 ```
-Isomorphisms can also be computed by comparing hashes. `ghash(g)` computes the canonical representative of a graph's isomorphism class and then hashes the canonical adjacency matrix and vertex labels.
+Isomorphisms can also be computed by comparing hashes. `canonical_id(g)` computes the canonical representative of a graph's isomorphism class and then hashes the result to obtain a canonical identifier, that (up to hash collisions) is unique for every isomorphism class.
 ```julia-repl
-julia> ghash(g)
-0x3127d9b726f2c846
-julia> ghash(h)
-0x3127d9b726f2c846
+julia> canonical_id(g)
+0xbba7d28cf1b350b27806af687f7f5f8e
+julia> canonical_id(h)
+0xbba7d28cf1b350b27806af687f7f5f8e
 ```
 Graph hashes make it possible to quickly compare large numbers of graphs for isomorphism. Simply compute all hashes and filter out the duplicates!
 

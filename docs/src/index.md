@@ -9,7 +9,7 @@ pkg> add NautyGraphs
 ```
 ## Basic Usage
 NautyGraphs.jl defines the `NautyGraph` or `NautyDiGraph` graph formats, which can be constructed and modified in the same way as regular `Graphs` from Graphs.jl:
-```jldoctest; output=false
+```jldoctest intro; output=false
 using NautyGraphs, Graphs
 
 A = [0 1 0 0;
@@ -23,11 +23,11 @@ for edge in [Edge(2, 4), Edge(4, 1), Edge(4, 3), Edge(1, 3)]
   add_edge!(h, edge)
 end
 # output
-true
+
 ```
 Internally, a `NautyGraph` is represented as a bit vector, so that it can be passed directly to _nauty_ without any conversion.
 To check whether two graphs are isomorphic, use `is_isomorphic` or `≃` (`\simeq`):
-```jldoctest
+```jldoctest intro
 julia> g == h
 false
 
@@ -35,12 +35,20 @@ julia> g ≃ h
 true
 ```
 Use `canonize!(g)` to reorder `g` into canonical order. `canonize!(g)` also returns the permutation needed to canonize `g`:
-```julia-repl
+```jldoctest intro
 julia> canonize!(g)
-[1, 3, 4, 2]
+4-element Vector{Int32}:
+ 1
+ 3
+ 4
+ 2
 
 julia> canonize!(h)
-[2, 1, 3, 4]
+4-element Vector{Int32}:
+ 2
+ 1
+ 3
+ 4
 
 julia> g == h
 true

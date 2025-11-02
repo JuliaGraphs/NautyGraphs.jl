@@ -6,7 +6,7 @@ are intrinsically compatible with _nauty_, performing isomorphism checks or grap
 ### Creating `NautyGraphs`
 `NautyGraphs` and `NautyDiGraphs` can be created in the same way as graphs from `Graphs.jl`.  As an example, here are three different ways to define the same graph:
 
-```jldoctest
+```jldoctest default
 using NautyGraphs, Graphs
 
 A = [0 1 0 0;
@@ -37,7 +37,7 @@ TODO: conversion from and to regular graphs!!
 There is one difference to `Graphs.jl`, in that `NautyGraphs` are inherently __labeled__, meaning that every vertex carries and integer label.
 If labels are not explicitly provided, they are set to zero. Here is an example that sets vertex labels during graph creation:
 
-```jldoctest
+```jldoctest default
 julia> g4 = NautyGraph(edges; vertex_labels=[4, 3, 2, 1])
 {4, 4} undirected NautyGraph
 
@@ -51,7 +51,7 @@ julia> labels(g4)
 
 ### Adding or removing vertices and edges
 Modify a graph after creation can also be done using Graphs.jl functions. Here is a quick example:
-```jldoctest; output=false
+```jldoctest default; output=false
 
 g5 = NautyDiGraph(4; vertex_labels=[0, 5, 20, 8])
 
@@ -76,4 +76,4 @@ true
 NautyGraphs.jl does not support edge labels. However, it is possible to manually represent any edge-labeled graph as a (larger)
 vertex labeled graph. See, for example, Section 14 of the [nauty manual](https://pallini.di.uniroma1.it/Guide.html) for more information.
 
-[^1] If you are interested in the details of the low-level graph representation, check out the [nauty manual](https://pallini.di.uniroma1.it/Guide.html).
+[^1]: If you are interested in the details of the low-level graph representation, check out the [nauty manual](https://pallini.di.uniroma1.it/Guide.html).

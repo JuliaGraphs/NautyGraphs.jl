@@ -24,41 +24,40 @@ A = [0 1 0 0;
 g = NautyGraph(A)
 
 h = NautyGraph(4)
-for edge in [(2, 4), (4, 1), (4, 3), (1, 3)]
+for edge in [Edge(2, 4), Edge(4, 1), Edge(4, 3), Edge(1, 3)]
   add_edge!(h, edge)
 end
+# output
+
 ```
-Internally, a `NautyGraph` is represented as a bit vector, so that it can be passed directly to _nauty_ without any conversion.
+Internally, a `NautyGraph` is represented as by its adjacency matrix in a memory-efficient format, and it can be passed directly to _nauty_ without any conversion.
 To check whether two graphs are isomorphic, use `is_isomorphic` or `≃` (`\simeq`):
 ```julia-repl
+julia> g == h
+false
+
 julia> g ≃ h
 true
-
-julia> adjacency_matrix(g) == adjacency_matrix(h)
-false
 ```
 Use `canonize!(g)` to reorder `g` into canonical order. `canonize!(g)` also returns the permutation needed to canonize `g`:
 ```julia-repl
 julia> canonize!(g)
-[1, 3, 4, 2]
+4-element Vector{Int32}:
+ 1
+ 3
+ 4
+ 2
 
 julia> canonize!(h)
-[2, 1, 3, 4]
+4-element Vector{Int32}:
+ 2
+ 1
+ 3
+ 4
 
-julia> adjacency_matrix(g) == adjacency_matrix(h)
+julia> g == h
 true
 ```
-Isomorphisms can also be computed by comparing hashes. `canonical_id(g)` computes the canonical representative of a graph's isomorphism class and then hashes the result to obtain a canonical identifier, that (up to hash collisions) is unique for every isomorphism class.
-```julia-repl
-julia> canonical_id(g)
-0xbba7d28cf1b350b27806af687f7f5f8e
-julia> canonical_id(h)
-0xbba7d28cf1b350b27806af687f7f5f8e
-```
-Graph hashes make it possible to quickly compare large numbers of graphs for isomorphism. Simply compute all hashes and filter out the duplicates!
-
-To obtain information about a graph's automorphism group, use `nauty(g)`. This will return the canonical permutation as well as an `AutomorphismGroup` object.
-Right now, the recorded properties of the automorphism group are very limited and only include the group size and orbits, but this will change in the future.
 
 ## See also
 - [_nauty_ & _traces_](https://pallini.di.uniroma1.it/)

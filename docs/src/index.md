@@ -25,7 +25,7 @@ end
 # output
 
 ```
-Internally, a `NautyGraph` is represented as a bit vector, so that it can be passed directly to _nauty_ without any conversion.
+Internally, a `NautyGraph` is represented as by its adjacency matrix in a memory-efficient format, and it can be passed directly to _nauty_ without any conversion.
 To check whether two graphs are isomorphic, use `is_isomorphic` or `≃` (`\simeq`):
 ```jldoctest intro
 julia> g == h

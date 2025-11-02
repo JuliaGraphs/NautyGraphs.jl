@@ -40,6 +40,25 @@ Base.size(gset::Graphset) = (gset.n, gset.n)
 Base.IndexStyle(::Type{Graphset}) = IndexCartesian()
 Base.similar(gset::Graphset{W}) where {W} = Graphset{W}(gset.n, gset.m)
 
+Base.hash(gset::Graphset, h::UInt=zero(UInt)) = _graphsethash(gset, h)
+@generated function _graphsethash(gset::Graphset{W}, h::UInt=zero(UInt)) where {W}
+    return quote hashlong = @ccall $(libnauty(W)).hashgraph(
+        gset.words::Ref{W},
+        gset.m::Cint,
+        gset.n::Cint,
+        reinterpret(Clong, h)::Clong)::Clong 
+        return reinterpret(UInt, hashlong)
+    end
+end
+
+@inline function active_words(gset::Graphset{W}) where {W}
+    # Return the words actually used for representing the matrix, without any unnecessary padding
+    m_eff = cld(gset.n, wordsize(W))
+    return (gset.words[(i - 1) * gset.m + j] for j in 1:m_eff for i in 1:gset.n)
+end
+# if both graphsets have the same word type, we can directly compare words; otherwise, we fall back to elementwise compare
+Base.:(==)(gs1::Graphset{W}, gs2::Graphset{W}) where {W} = all(w1 == w2 for (w1, w2) in zip(active_words(gs1), active_words(gs2)))
+
 function Base.copy!(dest::Graphset, src::Graphset)
     dest.n = src.n
     dest.m = src.m
@@ -56,6 +75,7 @@ end
 @inline wordsize(u::Unsigned) = 8 * sizeof(u)
 @inline wordsize(T::Type{<:Unsigned}) = 8 * sizeof(T)
 @inline wordsize(::Graphset{W}) where {W} = wordsize(W)
+@inline logwordsize(::Type{UInt8}) = 3
 @inline logwordsize(::Type{UInt16}) = 4
 @inline logwordsize(::Type{UInt32}) = 5
 @inline logwordsize(::Type{UInt64}) = 6
@@ -103,9 +123,8 @@ end
     return gset
 end
 
-function _increase_padding!(gset::Graphset{W}, m::Integer=1) where {W}
-    # TODO: optimize this
-    for _ in Base.OneTo(m)
+function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+    for _ in Base.OneTo(Δm)
         gset.m += 1
         for i in Base.OneTo(gset.n)
             insert!(gset.words, i * gset.m, zero(W))
@@ -113,6 +132,11 @@ function _increase_padding!(gset::Graphset{W}, m::Integer=1) where {W}
     end
     return gset
 end
+# function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+#     return gset
+# end
+# function minimize_padding!(gset::Graphset{W}) where {W}
+# end
 
 @inline function partial_leftshift(word::Unsigned, n::Integer, start::Integer, fillword::Unsigned=zero(word))
     # Starting from the `start`th bit from the left of `word`, shift all bits to the left `n` times,
@@ -130,7 +154,7 @@ end
 end
 
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
-    _increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
+    increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
     append!(gset.words, fill(zero(W), n*gset.m))
     gset.n += n
     return gset

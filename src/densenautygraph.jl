@@ -9,7 +9,7 @@ mutable struct DenseNautyGraph{D,W<:Unsigned} <: AbstractNautyGraph{Int}
     graphset::Graphset{W}
     labels::Vector{Int}
     ne::Int
-    hashval::Union{HashType,Nothing}
+    iscanon::Bool
 end
 function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where {D,W}
     if !isnothing(vertex_labels) && graphset.n != length(vertex_labels)
@@ -21,7 +21,7 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, graphset.n)
     end
-    return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, nothing)
+    return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end
 
 
@@ -64,6 +64,7 @@ end
 function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
     h = invoke(G, Tuple{AbstractGraph}, g)
     @views h.labels .= g.labels
+    h.iscanon = g.iscanon
     return h
 end
 
@@ -90,12 +91,12 @@ end
 DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(edge_list; vertex_labels)
 
 
-Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g.labels), g.ne, g.hashval)
+Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g.labels), g.ne, g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}
     copy!(dest.graphset, src.graphset)
     copy!(dest.labels, src.labels)
     dest.ne = src.ne
-    dest.hashval = src.hashval
+    dest.iscanon = src.iscanon
     return dest
 end
 
@@ -107,6 +108,7 @@ Base.:(==)(g::DenseNautyGraph, h::DenseNautyGraph) = (g.graphset == h.graphset) 
 
 # BASIC GRAPH API
 labels(g::AbstractNautyGraph) = g.labels
+iscanon(g::AbstractNautyGraph) = g.iscanon
 Graphs.nv(g::DenseNautyGraph) = g.graphset.n
 Graphs.ne(g::DenseNautyGraph) = g.ne
 Graphs.vertices(g::DenseNautyGraph) = Base.OneTo(nv(g))
@@ -222,7 +224,7 @@ function Graphs.add_edge!(g::DenseNautyGraph, e::Edge)
     g.graphset[e.src, e.dst] = 1
     is_directed(g) || (g.graphset[e.dst, e.src] = 1)
     g.ne += 1
-    g.hashval = nothing
+    g.iscanon = false
     return true
 end
 Graphs.add_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.add_edge!(g, edgetype(g)(i, j))
@@ -235,7 +237,7 @@ function Graphs.rem_edge!(g::DenseNautyGraph, e::Edge)
     g.graphset[e.src, e.dst] = 0
     is_directed(g) || (g.graphset[e.dst, e.src] = 0)
     g.ne -= 1
-    g.hashval = nothing
+    g.iscanon = false
     return true
 end
 Graphs.rem_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.rem_edge!(g, edgetype(g)(i, j))
@@ -246,7 +248,7 @@ function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer; vertex_labels=0)
     _add_vertices!(g.graphset, n)
     resize!(g.labels, ng + n)
     g.labels[ng+1:end] .= vertex_labels
-    g.hashval = nothing
+    g.iscanon = false
     return n
 end
 Graphs.add_vertex!(g::DenseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
@@ -258,7 +260,7 @@ function Graphs.rem_vertices!(g::DenseNautyGraph, inds)
     deleteat!(g.labels, inds)
 
     g.ne = is_directed(g) ? sum(g.graphset) : (sum(g.graphset) + tr(g.graphset)) ÷ 2
-    g.hashval = nothing
+    g.iscanon = false
     return true
 end
 Graphs.rem_vertex!(g::DenseNautyGraph, i::Integer) = rem_vertices!(g, (i,))

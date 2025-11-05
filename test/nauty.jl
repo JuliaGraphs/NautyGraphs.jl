@@ -118,7 +118,7 @@
     canonize!(canon5)
 
     canonperm5 = canonical_permutation(g5)
-    @test canon5.labels == g5.labels[canonperm5]
+    @test labels(canon5) == labels(g5)[canonperm5]
 
     # Just test that multithreading doesnt lead to errors
     thread_gs = [copy(g4) for i in 1:10]

@@ -8,7 +8,7 @@ The _nauty_ library actually does not solve the graph isomorphsim problem direct
 
 To see what this looks like in practice, let's first construct two unequal, but isomorphic graphs:
 ```jldoctest isomorph
-using NautyGraphs, Graphs
+using NautyGraphs
 g1 = NautyGraph([Edge(1, 2), Edge(2, 3), Edge(2, 4), Edge(3, 4)])
 g2 = g1[[3, 2, 4, 1]] # permute the vertices of g1
 

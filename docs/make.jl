@@ -1,8 +1,6 @@
-using Pkg; Pkg.add("Graphs")
-
 using Documenter, NautyGraphs
 
-DocMeta.setdocmeta!(NautyGraphs, :DocTestSetup, :(using NautyGraphs, Graphs); recursive=true)
+DocMeta.setdocmeta!(NautyGraphs, :DocTestSetup, :(using NautyGraphs); recursive=true)
 
 makedocs(sitename="NautyGraphs.jl";
     pages = [

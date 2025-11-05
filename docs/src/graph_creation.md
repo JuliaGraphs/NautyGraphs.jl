@@ -7,7 +7,7 @@ are intrinsically compatible with _nauty_, performing isomorphism checks or grap
 `NautyGraphs` and `NautyDiGraphs` can be created in the same way as graphs from `Graphs.jl`.  As an example, here are three different ways to define the same graph:
 
 ```jldoctest default
-using NautyGraphs, Graphs
+using NautyGraphs
 
 A = [0 1 0 0;
      1 0 1 1;

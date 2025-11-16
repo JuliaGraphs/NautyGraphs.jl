@@ -1,10 +1,5 @@
 # NautyGraphs.jl
 
-[![Documentation stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliagraphs.org/NautyGraphs.jl/stable/)
-[![Documentation dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliagraphs.org/NautyGraphs.jl/dev/)
-[![Build Status](https://github.com/mxhbl/NautyGraphs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mxhbl/NautyGraphs.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/mxhbl/NautyGraphs.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mxhbl/NautyGraphs.jl)
-
 NautyGraphs.jl is a Julia interface to the popular graph isomorphism tool [_nauty_](https://pallini.di.uniroma1.it/) by Brendan McKay. It allows for efficient isomorphism checking, canonical labeling, and hashing of vertex-labeled graphs. In addition, NautyGraphs.jl is fully compatible with the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) API. This makes it easy to create or modify graphs through familiar syntax, and allows NautyGraphs to work with a large library of graph algorithms.
 **Warning**: NautyGraphs.jl currently does not work on Windows.
 ## Installation
@@ -14,7 +9,7 @@ pkg> add NautyGraphs
 ```
 ## Basic Usage
 NautyGraphs.jl defines the `NautyGraph` or `NautyDiGraph` graph formats, which can be constructed and modified in the same way as regular `Graphs` from Graphs.jl:
-```julia
+```jldoctest intro; output=false
 using NautyGraphs
 
 A = [0 1 0 0;
@@ -27,10 +22,12 @@ h = NautyGraph(4)
 for edge in [Edge(2, 4), Edge(4, 1), Edge(4, 3), Edge(1, 3)]
   add_edge!(h, edge)
 end
+# output
+
 ```
 Internally, a `NautyGraph` is represented as by its adjacency matrix in a memory-efficient format, and it can be passed directly to _nauty_ without any conversion.
 To check whether two graphs are isomorphic, use `is_isomorphic` or `≃` (`\simeq`):
-```julia-repl
+```jldoctest intro
 julia> g == h
 false
 
@@ -38,7 +35,7 @@ julia> g ≃ h
 true
 ```
 Use `canonize!(g)` to reorder `g` into canonical order. `canonize!(g)` also returns the permutation needed to canonize `g`:
-```julia-repl
+```jldoctest intro
 julia> canonize!(g)
 4-element Vector{Int32}:
  1

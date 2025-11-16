@@ -1,4 +1,4 @@
-rng = Random.Random.MersenneTwister(0) # Use MersenneTwister for Julia 1.6 compat
+using NautyGraphs: active_words
 
 function test_graphsets(A; mfacts)
     n, _ = size(A)
@@ -8,9 +8,13 @@ function test_graphsets(A; mfacts)
         
         g32 = Graphset{UInt32}(A, mf * cld(n, NautyGraphs.wordsize(UInt32)))
         @test g32 == A
+        @test g32 == g16
+        @test hash(g32) == hash(g16)
 
         g64 = Graphset{UInt64}(A, mf * cld(n, NautyGraphs.wordsize(UInt64)))
         @test g64 == A
+        @test g64 == g32
+        @test hash(g64) == hash(g32)
     end
     return
 end
@@ -31,17 +35,36 @@ end
     gs2 .= A
 
     @test gs1 == gs2
+    @test hash(gs1) == hash(gs2)
 
     NautyGraphs._rem_vertex!(gs1, 3)
     NautyGraphs._rem_vertex!(gs2, 1)
 
     @test gs1 != gs2
+    @test hash(gs1) != hash(gs2)
 
-    gs4 = Graphset{UInt64}(3, 2)
+    gs3 = copy(gs1)
+    gs4 = copy(gs1)
+
+    NautyGraphs.increase_padding!(gs4, 1)
+
+    @test gs3 == gs4
+    @test hash(gs3) == hash(gs4)
+    @test gs3.words == collect(active_words(gs4))
+
+    NautyGraphs.increase_padding!(gs4, 2)
+    NautyGraphs.increase_padding!(gs4, 3)
+
+    @test gs3 == gs4
+    @test hash(gs3) == hash(gs4)
+    @test collect(active_words(gs3)) == collect(active_words(gs4))
+      
     gs5 = Graphset{UInt64}(3, 2)
+    gs6 = Graphset{UInt64}(3, 2)
 
-    NautyGraphs._rem_vertex!(gs4, 2)
-    NautyGraphs._add_vertex!(gs4)
+    NautyGraphs._rem_vertex!(gs5, 2)
+    NautyGraphs._add_vertex!(gs5)
 
-    @test gs4 == gs5
+    @test gs5 == gs6
+    @test hash(gs5) == hash(gs6)
 end

@@ -1,7 +1,6 @@
 libnauty(::Type{UInt16}) = nauty_jll.libnautyTS
 libnauty(::Type{UInt32}) = nauty_jll.libnautyTW
 libnauty(::Type{UInt64}) = nauty_jll.libnautyTL
-libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
 
 mutable struct NautyOptions
     getcanon::Cint # Warning: setting getcanon to false means that nauty will NOT compute the canonical representative, which may lead to unexpected results.
@@ -43,12 +42,15 @@ end
     return :(NautyOptions(cglobal((:dispatch_graph, $(libnauty(W))), Cvoid); digraph_or_loops, ignorelabels, groupinfo))
 end
 
-const DEFAULTOPTIONS16 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS32 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS64 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-default_options(::DenseNautyGraph{D,UInt16}) where {D} = DEFAULTOPTIONS16
-default_options(::DenseNautyGraph{D,UInt32}) where {D} = DEFAULTOPTIONS32
-default_options(::DenseNautyGraph{D,UInt64}) where {D} = DEFAULTOPTIONS64
+const DEFAULTOPTIONS_DENSE16 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_DENSE32 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_DENSE64 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+const DEFAULTOPTIONS_SPARSE = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+
+default_options(::DenseNautyGraph{D,UInt16}) where {D} = DEFAULTOPTIONS_DENSE16
+default_options(::DenseNautyGraph{D,UInt32}) where {D} = DEFAULTOPTIONS_DENSE32
+default_options(::DenseNautyGraph{D,UInt64}) where {D} = DEFAULTOPTIONS_DENSE64
+default_options(::SparseNautyGraph) = DEFAULTOPTIONS_SPARSE
 
 mutable struct NautyStatistics
     grpsize1::Cdouble
@@ -76,7 +78,7 @@ struct AutomorphismGroup
     # generators::Vector{Vector{Cint}} #TODO: not implemented
 end
 
-function _densenauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D,W}
+function _nauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D,W}
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
     n, m = g.graphset.n, g.graphset.m
 
@@ -84,14 +86,22 @@ function _densenauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_opti
     orbits = zeros(Cint, n)
     canong = Graphset{W}(n, m)
 
-    _ccall_densenauty(g, lab, ptn, orbits, options, statistics, canong)
+    _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
+    canonperm = (lab .+= 1)
+    return canong, canonperm, orbits, statistics
+end
+function _nauty(g::SparseNautyGraph{D}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D}
+    lab, ptn = vertexlabels2labptn(g.labels)
+    orbits = zeros(Cint, nv(g))
+    canong = SparseGraphRep()
 
+    _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
     canonperm = (lab .+= 1)
     return canong, canonperm, orbits, statistics
 end
 
-@generated function _ccall_densenauty(g::DenseNautyGraph{D,W}, lab, ptn, orbits, options, statistics, canong) where {D,W}
-    return quote @ccall $(libnauty(W)).densenauty(
+@generated function _ccall_nauty(g::DenseNautyGraph{D,W}, lab, ptn, orbits, options, statistics, canong) where {D,W}
+    return quote @ccall $(libnauty(g)).densenauty(
         g.graphset.words::Ref{W},
         lab::Ref{Cint},
         ptn::Ref{Cint},
@@ -102,15 +112,49 @@ end
         g.graphset.n::Cint,
         canong.words::Ref{W})::Cvoid end
 end
+@generated function _ccall_nauty(g::SparseNautyGraph, lab, ptn, orbits, options, statistics, canong)
+    return quote 
+        @ccall $(libnauty(g)).sparsenauty(
+        Ref(g)::Ref{SparseGraphRep},
+        lab::Ref{Cint},
+        ptn::Ref{Cint},
+        orbits::Ref{Cint},
+        Ref(options)::Ref{NautyOptions},
+        Ref(statistics)::Ref{NautyStatistics},
+        Ref(canong)::Ref{SparseGraphRep})::Cvoid end
+end
+
+function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm)
+    # Base.hash skips elements in arrays of length >= 8192
+    # Use SHA in these cases
+    canong_hash = length(canong) >= 8192 ? hash_sha(canong) : hash(canong)
+    labels_hash = @views length(g.labels) >= 8192 ? hash_sha(g.labels[canonperm]) : hash(g.labels[canonperm])
+
+    hashval = hash(labels_hash, canong_hash)
+    g.hashval = hashval
+    return
+end
+function _canonize!(g::DenseNautyGraph, canong::Graphset, canonperm)
+    copy!(g.graphset, canong)
+    permute!(g.labels, canonperm)
+    return
+end
+function _sethash!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
+    # TODO
+    return
+end
+function _canonize!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
+    _unsafe_copyfromsparsegraphrep!(g, canong)
+    permute!(g.labels, canonperm)
+    return
+end
 
 """
-    nauty(g::AbstractNautyGraph, [options::NautyOptions; canonize=false])
+    nauty(g::AbstractNautyGraph, [options::NautyOptions]; [canonize=false])
 
 Compute a graph `g`'s canonical form and automorphism group.
 """
-function nauty(::AbstractNautyGraph, ::NautyOptions; kwargs...) end
-
-function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); canonize=false)
+function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
         error("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed.")
     end
@@ -119,7 +163,7 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
         error("`options.getcanon` needs to be enabled.")
     end
 
-    canong, canonperm, orbits, statistics = _densenauty(g, options)
+    canong, canonperm, orbits, statistics = _nauty(g, options)
     # generators = Vector{Cint}[] # TODO: extract generators from nauty call
     autg = AutomorphismGroup(statistics.grpsize1 * 10^statistics.grpsize2, orbits)
 
@@ -127,6 +171,9 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
         _copycanon!(g, canong, canonperm)
         g.iscanon = true
     end
+    
+    # free memory allocated by nauty for sparse graphs
+    canong isa SparseGraphRep && _free_sparsegraphrep(canong)
     return canonperm, autg
 end
 
@@ -139,7 +186,7 @@ function canonize!(::AbstractNautyGraph) end
 
 function canonize!(g::DenseNautyGraph)
     iscanon(g) && return canonical_permutation(g)
-    canong, canonperm, _ = _densenauty(g)
+    canong, canonperm, _ = _nauty(g)
     _copycanon!(g, canong, canonperm)
     return canonperm
 end
@@ -160,7 +207,7 @@ function canonical_permutation(::AbstractNautyGraph) end
 
 function canonical_permutation(g::DenseNautyGraph)
     iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
-    _, canonperm, _ = _densenauty(g)
+    _, canonperm, _ = _nauty(g)
     return canonperm
 end
 
@@ -173,8 +220,8 @@ function is_isomorphic(::AbstractNautyGraph, ::AbstractNautyGraph) end
 
 function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
     iscanon(g) && iscanon(h) && return g == h
-    canong, permg, _ = _densenauty(g)
-    canonh, permh, _ = _densenauty(h)
+    canong, permg, _ = _nauty(g)
+    canonh, permh, _ = _nauty(h)
     return canong == canonh && view(g._labels, permg) == view(h._labels, permh)
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
@@ -193,7 +240,7 @@ function canonical_id(g::DenseNautyGraph)
     if iscanon(g)
         return _SHAhash(g.graphset, g._labels)
     else
-        canong, canonperm, _ = _densenauty(g)
+        canong, canonperm, _ = _nauty(g)
         return _SHAhash(canong, @view g._labels[canonperm])
     end
 end

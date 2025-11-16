@@ -8,6 +8,7 @@ rng = Random.Xoshiro(0)
 
 @testset verbose=true "NautyGraphs" begin
     include("densenautygraph.jl")
+    include("sparsenautygraph.jl")
     include("nauty.jl")
     include("graphset.jl")
     include("interface.jl")

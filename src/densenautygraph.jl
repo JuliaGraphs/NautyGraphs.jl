@@ -58,25 +58,23 @@ The graph can be directed (`D = true`) or undirected (`D = false`). If `D = fals
 Vertex labels can optionally be specified.
 """
 function DenseNautyGraph{D,W}(A::AbstractMatrix; vertex_labels=nothing) where {D,W<:Unsigned}
+    n, m = size(A)
+    isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
     graphset = Graphset{W}(A)
     return DenseNautyGraph{D}(graphset; vertex_labels)
 end
 DenseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(A; vertex_labels)
 
-function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
-    ng = G(nv(g))
+function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
+    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g)) : G(nv(g))
     for e in edges(g)
         add_edge!(ng, e)
-        !is_directed(g) && is_directed(ng) && add_edge!(ng, reverse(e))
+        if !is_directed(g) && is_directed(ng)
+            add_edge!(ng, reverse(e))
+        end
     end
     return ng
-end
-function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
-    h = invoke(G, Tuple{AbstractGraph}, g)
-    @views h._labels .= g._labels
-    h.iscanon = g.iscanon
-    return h
 end
 
 """
@@ -101,6 +99,8 @@ function DenseNautyGraph{D,W}(edge_list::Vector{<:AbstractEdge}; vertex_labels=n
 end
 DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(edge_list; vertex_labels)
 
+libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
+libnauty(::Type{DenseNautyGraph{D,W}}) where {D,W} = libnauty(W)
 
 Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g._labels), g.ne, g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}

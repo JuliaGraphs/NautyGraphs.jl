@@ -27,8 +27,6 @@ h = NautyGraph(4)
 for edge in [Edge(2, 4), Edge(4, 1), Edge(4, 3), Edge(1, 3)]
   add_edge!(h, edge)
 end
-# output
-
 ```
 Internally, a `NautyGraph` is represented as by its adjacency matrix in a memory-efficient format, and it can be passed directly to _nauty_ without any conversion.
 To check whether two graphs are isomorphic, use `is_isomorphic` or `≃` (`\simeq`):

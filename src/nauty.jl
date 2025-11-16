@@ -124,31 +124,6 @@ end
         Ref(canong)::Ref{SparseGraphRep})::Cvoid end
 end
 
-function _sethash!(g::DenseNautyGraph, canong::Graphset, canonperm)
-    # Base.hash skips elements in arrays of length >= 8192
-    # Use SHA in these cases
-    canong_hash = length(canong) >= 8192 ? hash_sha(canong) : hash(canong)
-    labels_hash = @views length(g.labels) >= 8192 ? hash_sha(g.labels[canonperm]) : hash(g.labels[canonperm])
-
-    hashval = hash(labels_hash, canong_hash)
-    g.hashval = hashval
-    return
-end
-function _canonize!(g::DenseNautyGraph, canong::Graphset, canonperm)
-    copy!(g.graphset, canong)
-    permute!(g.labels, canonperm)
-    return
-end
-function _sethash!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
-    # TODO
-    return
-end
-function _canonize!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
-    _unsafe_copyfromsparsegraphrep!(g, canong)
-    permute!(g.labels, canonperm)
-    return
-end
-
 """
     nauty(g::AbstractNautyGraph, [options::NautyOptions]; [canonize=false])
 
@@ -191,12 +166,18 @@ function canonize!(g::DenseNautyGraph)
     return canonperm
 end
 
-function _copycanon!(g, canong, canonperm)
+function _copycanon!(g::DenseNautyGraph, canong::Graphset, canonperm)
     copy!(g.graphset, canong)
     permute!(g._labels, canonperm)
     g.iscanon = true
     return
 end
+function _copycanon!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
+    _unsafe_copyfromsparsegraphrep!(g, canong)
+    permute!(g.labels, canonperm)
+    return
+end
+
 
 """
     canonical_permutation(g::AbstractNautyGraph)

@@ -34,8 +34,8 @@ export
     nv, ne, 
     vertices, edges,
     has_vertex, has_edge,
-    inneighbors, outneighbors,
-    neighbors,
+    inneighbors, outneighbors, neighbors,
+    indegree, outdegree, degree,
     is_directed,
     edgetype,
     Edge

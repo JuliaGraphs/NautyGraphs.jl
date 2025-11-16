@@ -80,7 +80,7 @@ function _densenauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_opti
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
     n, m = g.graphset.n, g.graphset.m
 
-    lab, ptn = vertexlabels2labptn(g.labels)
+    lab, ptn = vertexlabels2labptn(labels(g))
     orbits = zeros(Cint, n)
     canong = Graphset{W}(n, m)
 
@@ -123,7 +123,10 @@ function nauty(g::DenseNautyGraph, options::NautyOptions=default_options(g); can
     # generators = Vector{Cint}[] # TODO: extract generators from nauty call
     autg = AutomorphismGroup(statistics.grpsize1 * 10^statistics.grpsize2, orbits)
 
-    canonize && _copycanon!(g, canong, canonperm)
+    if canonize
+        _copycanon!(g, canong, canonperm)
+        g.iscanon = true
+    end
     return canonperm, autg
 end
 
@@ -135,7 +138,7 @@ Reorder `g`'s vertices into canonical order and return the permutation used.
 function canonize!(::AbstractNautyGraph) end
 
 function canonize!(g::DenseNautyGraph)
-    iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
+    iscanon(g) && return canonical_permutation(g)
     canong, canonperm, _ = _densenauty(g)
     _copycanon!(g, canong, canonperm)
     return canonperm
@@ -143,7 +146,7 @@ end
 
 function _copycanon!(g, canong, canonperm)
     copy!(g.graphset, canong)
-    permute!(g.labels, canonperm)
+    permute!(g._labels, canonperm)
     g.iscanon = true
     return
 end
@@ -172,7 +175,7 @@ function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
     iscanon(g) && iscanon(h) && return g == h
     canong, permg, _ = _densenauty(g)
     canonh, permh, _ = _densenauty(h)
-    return canong == canonh && view(g.labels, permg) == view(h.labels, permh)
+    return canong == canonh && view(g._labels, permg) == view(h._labels, permh)
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
 
@@ -188,10 +191,10 @@ function canonical_id end
 
 function canonical_id(g::DenseNautyGraph)
     if iscanon(g)
-        return _SHAhash(g.graphset, g.labels)
+        return _SHAhash(g.graphset, g._labels)
     else
         canong, canonperm, _ = _densenauty(g)
-        return _SHAhash(canong, @view g.labels[canonperm])
+        return _SHAhash(canong, @view g._labels[canonperm])
     end
 end
 

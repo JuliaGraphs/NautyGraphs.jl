@@ -209,10 +209,10 @@
 
     g4 = copy(g)
     add_vertices!(g4, 5; vertex_labels=1:5)
-    @test g4.labels == vcat(g.labels, 1:5)
+    @test labels(g4) == vcat(labels(g), 1:5)
 
     g5 = copy(g)
-    g5.labels = [1, 4, 5, 10]
+    setlabels!(g5, [1, 4, 5, 10])
     g6 = copy(g5)
     @test labels(g6) == [1, 4, 5, 10]
 
@@ -225,8 +225,8 @@
     @test h.graphset.n == g.graphset.n
     @test h.ne == g.ne
     @test h.graphset.m == g.graphset.m
-    @test h.labels == g.labels
-    @test h.iscanon == g.iscanon
+    @test labels(h) == labels(g)
+    @test iscanon(h) == iscanon(g)
 
     glab = NautyGraph(5; vertex_labels=1:5)
     add_edge!(glab, 1, 2)
@@ -236,10 +236,10 @@
     add_edge!(glab, 2, 5)
 
     gind1 = glab[[1, 5, 2]]
-    @test gind1.labels == [1, 5, 2]
+    @test labels(gind1) == [1, 5, 2]
 
     gind2 = glab[[Edge(1, 2), Edge(1, 4)]]
-    @test gind2.labels == [1, 2, 4]
+    @test labels(gind2) == [1, 2, 4]
 
     gb = NautyGraph(g0)
     vg = DiGraph(g)
@@ -247,4 +247,53 @@
     bb_ng = blockdiag(gb, g)
     bb_g = NautyDiGraph(blockdiag(DiGraph(g0), vg))
     @test bb_ng == bb_g
+
+    gl1 = NautyGraph(3; vertex_labels=[1,2,3])
+    gl2 = NautyGraph(3)
+    setlabels!(gl2, [1,2,3])
+    gl3 = NautyGraph(3)
+    foreach(1:3) do i
+        setlabel!(gl3, i, i)
+    end
+
+    @test labels(gl1) == labels(gl2) == labels(gl3)
+    @test label(gl1, 1) == label(gl2, 1)
+    @test label(gl1, 2) == label(gl2, 2)
+
+    gl4 = copy(gl1)
+    add_edge!(gl4, 1, 2)
+    gl4_id1 = canonical_id(gl4)
+    setlabels!(gl4, [3, 4, 5])
+    gl4_id2 = canonical_id(gl4)
+
+    @test gl4_id1 != gl4_id2
+
+    canonize!(gl4)
+    @test NautyGraphs.iscanon(gl4)
+
+    setlabels!(gl4, [3, 4, 5])
+    @test !NautyGraphs.iscanon(gl4)
+
+    canonize!(gl4)
+    @test NautyGraphs.iscanon(gl4)
+
+    setlabel!(gl4, 3, 3)
+    @test !NautyGraphs.iscanon(gl4)
+
+    gl5 = copy(gl1)
+    add_edge!(gl5, 1, 2)
+    gl5_id1 = canonical_id(gl5)
+    setlabel!(gl5, 3, 6)
+    gl5_id2 = canonical_id(gl5)
+    
+    @test gl5_id1 != gl5_id2
+
+    gls1 = NautyGraph(; vertex_labels=[1, 2, 3, 4])
+    gls2 = NautyGraph(4; vertex_labels=[1, 2, 3, 4])
+    @test gls1 == gls2
+
+    add_vertices!(gls1, 2; vertex_labels=[5, 6])
+    add_vertices!(gls2; vertex_labels=[5, 6])
+
+    @test gls1 == gls2
 end

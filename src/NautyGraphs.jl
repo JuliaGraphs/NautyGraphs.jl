@@ -50,7 +50,6 @@ export
     iscanon,
     nauty,
     canonize!,
-    canonize,
     canonical_permutation,
     canonical_id,
     is_isomorphic,

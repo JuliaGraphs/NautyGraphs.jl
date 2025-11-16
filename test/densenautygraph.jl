@@ -31,6 +31,9 @@
         @test adjacency_matrix(g) == adjacency_matrix(ng)
         @test nv(g) == nv(ng)
         @test ne(g) == ne(ng)
+
+        # test that all inactive bits in the graphset are zero
+        @test sum(count_ones, ng.graphset.words; init=0) == sum(ng.graphset)
     end
 
     for (g, ng) in zip(gs, ngs)
@@ -45,6 +48,9 @@
             @test adjacency_matrix(g) == adjacency_matrix(ng)
             @test nv(g) == nv(ng)
             @test ne(g) == ne(ng)
+            
+            # test that all inactive bits in the graphset are zero
+            @test sum(count_ones, ng.graphset.words; init=0) == sum(ng.graphset)
         end
     end
 
@@ -56,6 +62,9 @@
         add_edge!(g, 1, nv(g))
         add_edge!(ng, 1, nv(ng))
         @test adjacency_matrix(g) == adjacency_matrix(ng)
+
+        # test that all inactive bits in the graphset are zero
+        @test sum(count_ones, ng.graphset.words; init=0) == sum(ng.graphset)
     end
 
     for (g, ng) in zip(gs, ngs)
@@ -66,6 +75,9 @@
         add_edge!(g, 1, 2)
         add_edge!(ng, 1, 2)
         @test adjacency_matrix(g) == adjacency_matrix(ng)
+
+        # test that all inactive bits in the graphset are zero
+        @test sum(count_ones, ng.graphset.words; init=0) == sum(ng.graphset)
     end
 
     # LOOPS

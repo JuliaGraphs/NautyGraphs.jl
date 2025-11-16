@@ -51,6 +51,8 @@ Base.hash(gset::Graphset, h::UInt=zero(UInt)) = _graphsethash(gset, h)
     end
 end
 
+Base.sum(g::Graphset{W}; kwargs...) where {W} = g.n > 0 ? sum(count_ones, active_words(g); kwargs...) : zero(W)
+
 @inline function active_words(gset::Graphset{W}) where {W}
     # Return the words actually used for representing the matrix, without any unnecessary padding
     m_eff = cld(gset.n, wordsize(W))

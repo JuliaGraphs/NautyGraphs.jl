@@ -7,7 +7,7 @@ unsigned integer type that holds the individual bits of the graph's adjacency ma
 """
 mutable struct DenseNautyGraph{D,W<:Unsigned} <: AbstractNautyGraph{Int}
     graphset::Graphset{W}
-    labels::Vector{Int}
+    _labels::Vector{Int}
     ne::Int
     iscanon::Bool
 end
@@ -39,6 +39,17 @@ end
 DenseNautyGraph{D}(n::Integer; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(n; vertex_labels)
 
 """
+    DenseNautyGraph{D}(; vertex_labels) where {D}
+
+Construct a vertex-labeled `DenseNautyGraph` on `length(vertex_labels)` vertices and 0 edges.
+Can be directed (`D = true`) or undirected (`D = false`).
+"""
+function DenseNautyGraph{D,W}(; vertex_labels) where {D,W<:Unsigned}
+    return DenseNautyGraph{D}(length(vertex_labels); vertex_labels)
+end
+DenseNautyGraph{D}(; vertex_labels) where {D} = DenseNautyGraph{D,UInt}(; vertex_labels)
+
+"""
     DenseNautyGraph{D}(A::AbstractMatrix; [vertex_labels]) where {D}
 
 Construct a `DenseNautyGraph{D}` from the adjacency matrix `A`.
@@ -63,7 +74,7 @@ function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
 end
 function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
     h = invoke(G, Tuple{AbstractGraph}, g)
-    @views h.labels .= g.labels
+    @views h._labels .= g._labels
     h.iscanon = g.iscanon
     return h
 end
@@ -91,10 +102,10 @@ end
 DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(edge_list; vertex_labels)
 
 
-Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g.labels), g.ne, g.iscanon)
+Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g._labels), g.ne, g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}
     copy!(dest.graphset, src.graphset)
-    copy!(dest.labels, src.labels)
+    copy!(dest._labels, src._labels)
     dest.ne = src.ne
     dest.iscanon = src.iscanon
     return dest
@@ -103,12 +114,51 @@ end
 Base.show(io::Core.IO, g::DenseNautyGraph{false}) = print(io, "{$(nv(g)), $(ne(g))} undirected NautyGraph")
 Base.show(io::Core.IO, g::DenseNautyGraph{true}) = print(io, "{$(nv(g)), $(ne(g))} directed NautyGraph")
 
-Base.hash(g::DenseNautyGraph, h::UInt) = hash(g.labels, hash(g.graphset, h))
-Base.:(==)(g::DenseNautyGraph, h::DenseNautyGraph) = (g.graphset == h.graphset) && (g.labels == h.labels)
+Base.hash(g::DenseNautyGraph, h::UInt) = hash(g._labels, hash(g.graphset, h))
+Base.:(==)(g::DenseNautyGraph, h::DenseNautyGraph) = (g.graphset == h.graphset) && (g._labels == h._labels)
 
 # BASIC GRAPH API
-labels(g::AbstractNautyGraph) = g.labels
-iscanon(g::AbstractNautyGraph) = g.iscanon
+
+"""
+    labels(g::AbstractNautyGraph)
+
+Return the vertex labels of `g`. 
+
+Do not modify the vector of labels returned. Use [`setlabels!`](@ref) or [`setlabel!`](@ref) instead.
+"""
+@inline labels(g::AbstractNautyGraph) = g._labels
+
+"""
+    label(g::AbstractNautyGraph, i::Integer)
+
+Return the label of vertex `i` of `g`.
+"""
+@inline label(g::AbstractNautyGraph, index::Integer) = g._labels[index]
+
+"""
+    setlabels!(g::AbstractNautyGraph, vertex_labels)
+
+Set the vertex labels of `g` equal to `vertex_labels`.
+"""
+@inline setlabels!(g::AbstractNautyGraph, vertex_labels) = (g.iscanon = false; g._labels .= vertex_labels)
+
+"""
+    setlabel!(g::AbstractNautyGraph, i::Integer, vertex_label)
+
+Set the label of vertex `i` of `g` equal to `vertex_label`.
+"""
+@inline setlabel!(g::AbstractNautyGraph, index::Integer, vertex_label) = (g.iscanon = false; g._labels[index] = vertex_label)
+
+"""
+    iscanon(g::AbstractNautyGraph)
+
+Return true if `g` has previously been canonized.
+
+`iscanon(g) == false` does not necessarily imply that `g` is not in canonical form, it just means `g` has never
+been explicitly canonized. This function should be considered internal and may be removed in future versions.
+"""
+@inline iscanon(g::AbstractNautyGraph) = g.iscanon
+
 Graphs.nv(g::DenseNautyGraph) = g.graphset.n
 Graphs.ne(g::DenseNautyGraph) = g.ne
 Graphs.vertices(g::DenseNautyGraph) = Base.OneTo(nv(g))
@@ -208,7 +258,8 @@ Base.zero(::Type{G}) where {G<:AbstractNautyGraph} = G(0)
 
 function _induced_subgraph(g::DenseNautyGraph, iter)
     h, vmap = invoke(Graphs.induced_subgraph, Tuple{AbstractGraph,typeof(iter)}, g, iter)
-    @views h.labels .= g.labels[vmap]
+    @views h._labels .= g._labels[vmap]
+    h.iscanon = false
     return h, vmap
 end
 Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{<:Integer}) = _induced_subgraph(g::DenseNautyGraph, iter)
@@ -246,18 +297,19 @@ function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer; vertex_labels=0)
     vertex_labels isa Number || n != length(vertex_labels) && throw(ArgumentError("Incompatible length: trying to add `n=$n` vertices, but`vertex_labels` has length $(length(vertex_labels))."))
     ng = nv(g)
     _add_vertices!(g.graphset, n)
-    resize!(g.labels, ng + n)
-    g.labels[ng+1:end] .= vertex_labels
+    resize!(g._labels, ng + n)
+    g._labels[ng+1:end] .= vertex_labels
     g.iscanon = false
     return n
 end
+Graphs.add_vertices!(g::DenseNautyGraph; vertex_labels) = Graphs.add_vertices!(g, length(vertex_labels); vertex_labels)
 Graphs.add_vertex!(g::DenseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
 
 function Graphs.rem_vertices!(g::DenseNautyGraph, inds)
     all(i->has_vertex(g, i), inds) || return false
 
     _rem_vertices!(g.graphset, inds)
-    deleteat!(g.labels, inds)
+    deleteat!(g._labels, inds)
 
     g.ne = is_directed(g) ? sum(g.graphset) : (sum(g.graphset) + tr(g.graphset)) ÷ 2
     g.iscanon = false
@@ -272,5 +324,5 @@ function Graphs.blockdiag(g::DenseNautyGraph{D1,W}, h::DenseNautyGraph{D2}) wher
     gset[1:ng, 1:ng] .= g.graphset
     gset[ng+1:end, ng+1:end] .= h.graphset
     D = D1 || D2
-    return DenseNautyGraph{D,W}(gset; vertex_labels=vcat(g.labels, h.labels))
+    return DenseNautyGraph{D,W}(gset; vertex_labels=vcat(labels(g), labels(h)))
 end

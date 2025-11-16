@@ -6,7 +6,7 @@ are intrinsically compatible with _nauty_, performing isomorphism checks or grap
 ### Creating `NautyGraphs`
 `NautyGraphs` and `NautyDiGraphs` can be created in the same way as graphs from `Graphs.jl`.  As an example, here are three different ways to define the same graph:
 
-```jldoctest default
+```jldoctest default; output=false
 using NautyGraphs, Graphs
 
 A = [0 1 0 0;
@@ -25,7 +25,7 @@ end
 
 g3 = NautyGraph(edges)
 
-g1 == g2 == g3
+g1 == g2 == g3 # true
 
 # output
 true
@@ -40,13 +40,29 @@ If labels are not explicitly provided, they are set to zero. Here is an example 
 ```jldoctest default
 julia> g4 = NautyGraph(edges; vertex_labels=[4, 3, 2, 1])
 {4, 4} undirected NautyGraph
+```
 
+After graph creation, vertex labels can be accessed and modified using
+```jldoctest default
 julia> labels(g4)
 4-element Vector{Int64}:
  4
  3
  2
  1
+
+julia> label(g4, 2) # returns the second vertex label
+3
+
+julia> setlabel!(g4, 1, 20) # sets the first label == 20
+20
+
+julia> setlabels!(g4, [1, 2, 3, 4])
+4-element Vector{Int64}:
+ 1
+ 2
+ 3
+ 4
 ```
 
 ### Adding or removing vertices and edges

@@ -52,7 +52,7 @@ julia> labels(g4)
  1
 
 julia> label(g4, 2) # returns the second vertex label
-4
+3
 
 julia> setlabel!(g4, 1, 20) # sets the first label == 20
 20

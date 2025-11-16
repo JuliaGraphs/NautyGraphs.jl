@@ -143,6 +143,7 @@ function canonize!(g::DenseNautyGraph)
     _copycanon!(g, canong, canonperm)
     return canonperm
 end
+
 function _copycanon!(g, canong, canonperm)
     copy!(g.graphset, canong)
     permute!(g._labels, canonperm)

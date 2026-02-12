@@ -193,15 +193,23 @@ Check whether two graphs `g` and `h` are isomorphic to each other by comparing t
 """
 function is_isomorphic end
 
-function is_isomorphic(g::G, h::G) where {G<:AbstractNautyGraph}
+function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
     iscanon(g) && iscanon(h) && return g == h
     canong, permg, _ = _nauty(g)
     canonh, permh, _ = _nauty(h)
     isiso = canong == canonh && view(g._labels, permg) == view(h._labels, permh)
-    if G <: SparseNautyGraph
-        _free_sparsegraphrep(canong)
-        _free_sparsegraphrep(canonh)
-    end
+    
+    return isiso
+end
+
+function is_isomorphic(g::SparseNautyGraph, h::SparseNautyGraph)
+    iscanon(g) && iscanon(h) && return g == h
+    canong, permg, _ = _nauty(g)
+    canonh, permh, _ = _nauty(h)
+    isiso = canong == canonh && view(g._labels, permg) == view(h._labels, permh)
+
+    _free_sparsegraphrep(canong)
+    _free_sparsegraphrep(canonh)
     return isiso
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)

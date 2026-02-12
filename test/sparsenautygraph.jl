@@ -9,8 +9,8 @@
         Asym = Int.((A + A') .> 0)
         push!(gs, Graph(Asym))
         push!(gs, DiGraph(A))
-        push!(ngs, SparseNautyGraph{false}(Asym))
-        push!(ngs, SparseNautyGraph{true}(A))
+        push!(ngs, SpNautyGraph(Asym))
+        push!(ngs, SpNautyDiGraph(A))
     end
 
     for (g, ng) in zip(gs, ngs)
@@ -68,7 +68,7 @@
 
     # LOOPS
     g_loop0 = Graph([1 0 0; 0 1 0; 0 0 0])
-    ng_loop0 = SparseNautyGraph{false}([1 0 0; 0 1 0; 0 0 0])
+    ng_loop0 = SpNautyGraph([1 0 0; 0 1 0; 0 0 0])
 
     @test ne(g_loop0) == ne(ng_loop0)
 
@@ -85,7 +85,7 @@
     @test ne(ng_loop0) == ne(g_loop0)
 
     g_diloop0 = DiGraph([1 0 0; 0 1 0; 0 0 0])
-    ng_diloop0 = SparseNautyGraph{true}([1 0 0; 0 1 0; 0 0 0])
+    ng_diloop0 = SpNautyDiGraph([1 0 0; 0 1 0; 0 0 0])
 
     @test ne(g_diloop0) == ne(ng_diloop0)
 
@@ -102,7 +102,7 @@
     @test ne(ng_diloop0) == ne(g_diloop0)
 
     g_loop = Graph(2)
-    ng_loop = SparseNautyGraph{false}(2)
+    ng_loop = SpNautyGraph(2)
 
     add_edge!(g_loop, 1, 1)
     add_edge!(ng_loop, 1, 1)
@@ -115,7 +115,7 @@
     @test ne(ng_loop) == ne(g_loop)
 
     g_diloop = DiGraph(2)
-    ng_diloop = SparseNautyGraph{true}(2)
+    ng_diloop = SpNautyDiGraph(2)
     add_edge!(g_diloop, 1, 1)
     add_edge!(ng_diloop, 1, 1)
     @test ne(ng_diloop) == ne(g_diloop)
@@ -132,12 +132,12 @@
     add_edge!(ng_diloop, 1, 2)
     @test ne(ng_diloop) == ne(g_diloop)
 
-    empty_g = SparseNautyGraph{false}(0)
+    empty_g = SpNautyGraph(0)
     @test nv(empty_g) == 0
     @test ne(empty_g) == 0
     
     g0 = erdos_renyi(70, 100; rng=rng)
-    rand_g = SparseNautyGraph{false}(g0)
+    rand_g = SpNautyGraph(g0)
 
     @test nv(rand_g) == 70
     @test ne(rand_g) == 100
@@ -159,12 +159,12 @@
     @test has_edge(rand_g, 75, 5) == false
 
     es = [Edge(1, 2), Edge(2, 3), Edge(2, 4)]
-    g = SparseNautyGraph{true}(4)
+    g = SpNautyDiGraph(4)
     for e in es
         add_edge!(g, e)
     end
 
-    k = SparseNautyGraph{true}(es)
+    k = SpNautyDiGraph(es)
     
     @test g == k
 
@@ -203,7 +203,7 @@
     rem_vertices!(g6, [1, 3])
     @test labels(g6) == [4, 10]
 
-    h = SparseNautyGraph{true}(4)
+    h = SpNautyDiGraph(4)
     copy!(h, g)
     @test h.v == g.v
     @test h.d == g.d
@@ -213,7 +213,7 @@
     @test labels(h) == labels(g)
     @test iscanon(h) == iscanon(g)
 
-    glab = SparseNautyGraph{false}(5; vertex_labels=1:5)
+    glab = SpNautyGraph(5; vertex_labels=1:5)
     add_edge!(glab, 1, 2)
     add_edge!(glab, 1, 3)
     add_edge!(glab, 1, 4)
@@ -226,17 +226,17 @@
     gind2 = glab[[Edge(1, 2), Edge(1, 4)]]
     @test labels(gind2) == [1, 2, 4]
 
-    gb = SparseNautyGraph{false}(g0)
+    gb = SpNautyGraph(g0)
     vg = DiGraph(g)
 
     bb_ng = blockdiag(gb, g)
-    bb_g = SparseNautyGraph{true}(blockdiag(DiGraph(g0), vg))
+    bb_g = SpNautyDiGraph(blockdiag(DiGraph(g0), vg))
     @test bb_ng == bb_g
 
-    gl1 = SparseNautyGraph{false}(3; vertex_labels=[1,2,3])
-    gl2 = SparseNautyGraph{false}(3)
+    gl1 = SpNautyGraph(3; vertex_labels=[1,2,3])
+    gl2 = SpNautyGraph(3)
     setlabels!(gl2, [1,2,3])
-    gl3 = SparseNautyGraph{false}(3)
+    gl3 = SpNautyGraph(3)
     foreach(1:3) do i
         setlabel!(gl3, i, i)
     end
@@ -273,8 +273,8 @@
     
     # @test gl5_id1 != gl5_id2
 
-    gls1 = SparseNautyGraph{false}(; vertex_labels=[1, 2, 3, 4])
-    gls2 = SparseNautyGraph{false}(4; vertex_labels=[1, 2, 3, 4])
+    gls1 = SpNautyGraph(; vertex_labels=[1, 2, 3, 4])
+    gls2 = SpNautyGraph(4; vertex_labels=[1, 2, 3, 4])
     @test gls1 == gls2
 
     add_vertices!(gls1, 2; vertex_labels=[5, 6])

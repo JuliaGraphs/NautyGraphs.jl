@@ -115,6 +115,9 @@ function SparseGraphRep()
     return SparseGraphRep(0, C_NULL, 0, C_NULL, C_NULL, C_NULL, 0, 0, 0, 0)
 end
 
+libnauty(::SparseGraphRep) = nauty_jll.libnautyTL
+libnauty(::Type{SparseGraphRep}) = nauty_jll.libnautyTL
+
 function Base.cconvert(::Type{Ref{SparseGraphRep}}, sref::Ref{<:SparseNautyGraph})
     s = sref[]
     cstr = SparseGraphRep(s.nde, pointer(s.v), s.nv, pointer(s.d), pointer(s.e), C_NULL, length(s.v), length(s.d), length(s.e), 0)
@@ -155,6 +158,12 @@ end
 @generated function Base.:(==)(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1, D2}
     return quote D1 == D2 && 
     labels(g) == labels(h) && 
+    Bool(@ccall $(libnauty(g)).aresame_sg(Ref(g)::Ref{SparseGraphRep}, Ref(h)::Ref{SparseGraphRep})::Cint)
+    end
+end
+
+@generated function Base.:(==)(g::SparseGraphRep, h::SparseGraphRep)
+    return quote 
     Bool(@ccall $(libnauty(g)).aresame_sg(Ref(g)::Ref{SparseGraphRep}, Ref(h)::Ref{SparseGraphRep})::Cint)
     end
 end
@@ -274,6 +283,12 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph}) = e2 == e1
+function Base.hash(edgeiter::SimpleEdgeIter{<:SparseNautyGraph}, h::UInt=zero(UInt))
+    for edge in edgeiter
+        h = hash(edge, h)
+    end
+    return h
+end
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D
 Graphs.is_directed(::Type{SparseNautyGraph{D}}) where {D} = D

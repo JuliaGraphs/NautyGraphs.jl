@@ -178,9 +178,9 @@ end
 
 Return the permutation `p` needed to canonize `g`, meaning that `g[p]` is canonical.
 """
-function canonical_permutation(::AbstractNautyGraph) end
+function canonical_permutation end
 
-function canonical_permutation(g::DenseNautyGraph)
+function canonical_permutation(g::AbstractNautyGraph)
     iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
     _, canonperm, _ = _nauty(g)
     return canonperm
@@ -191,13 +191,18 @@ end
 
 Check whether two graphs `g` and `h` are isomorphic to each other by comparing their canonical forms.
 """
-function is_isomorphic(::AbstractNautyGraph, ::AbstractNautyGraph) end
+function is_isomorphic end
 
-function is_isomorphic(g::DenseNautyGraph, h::DenseNautyGraph)
+function is_isomorphic(g::G, h::G) where {G<:AbstractNautyGraph}
     iscanon(g) && iscanon(h) && return g == h
     canong, permg, _ = _nauty(g)
     canonh, permh, _ = _nauty(h)
-    return canong == canonh && view(g._labels, permg) == view(h._labels, permh)
+    isiso = canong == canonh && view(g._labels, permg) == view(h._labels, permh)
+    if G <: SparseNautyGraph
+        _free_sparsegraphrep(canong)
+        _free_sparsegraphrep(canonh)
+    end
+    return isiso
 end
 ≃(g::AbstractNautyGraph, h::AbstractNautyGraph) = is_isomorphic(g, h)
 

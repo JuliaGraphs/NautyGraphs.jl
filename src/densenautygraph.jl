@@ -102,6 +102,8 @@ DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) whe
 libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
 libnauty(::Type{DenseNautyGraph{D,W}}) where {D,W} = libnauty(W)
 
+wordtype(g::DenseNautyGraph) = wordtype(g.graphset)
+
 Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g._labels), g.ne, g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}
     copy!(dest.graphset, src.graphset)
@@ -256,15 +258,15 @@ Base.eltype(::AbstractNautyGraph{T}) where {T} = T
 Base.zero(::G) where {G<:AbstractNautyGraph} = G(0)
 Base.zero(::Type{G}) where {G<:AbstractNautyGraph} = G(0)
 
-function _induced_subgraph(g::DenseNautyGraph, iter)
+function _induced_subgraph(g::AbstractNautyGraph, iter)
     h, vmap = invoke(Graphs.induced_subgraph, Tuple{AbstractGraph,typeof(iter)}, g, iter)
     @views h._labels .= g._labels[vmap]
     h.iscanon = false
     return h, vmap
 end
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{<:Integer}) = _induced_subgraph(g::DenseNautyGraph, iter)
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{Bool}) = _induced_subgraph(g::DenseNautyGraph, iter)
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{<:AbstractEdge}) = _induced_subgraph(g::DenseNautyGraph, iter)
+Graphs.induced_subgraph(g::AbstractNautyGraph, iter::AbstractVector{<:Integer}) = _induced_subgraph(g, iter)
+Graphs.induced_subgraph(g::AbstractNautyGraph, iter::AbstractVector{Bool}) = _induced_subgraph(g, iter)
+Graphs.induced_subgraph(g::AbstractNautyGraph, iter::AbstractVector{<:AbstractEdge}) = _induced_subgraph(g, iter)
 
 # GRAPH MODIFY METHODS
 function Graphs.add_edge!(g::DenseNautyGraph, e::Edge)

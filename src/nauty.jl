@@ -78,22 +78,15 @@ struct AutomorphismGroup
     # generators::Vector{Vector{Cint}} #TODO: not implemented
 end
 
-function _nauty(g::DenseNautyGraph{D,W}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D,W}
+function _nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics())
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
-    n, m = g.graphset.n, g.graphset.m
-
     lab, ptn = vertexlabels2labptn(labels(g))
-    orbits = zeros(Cint, n)
-    canong = Graphset{W}(n, m)
-
-    _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
-    canonperm = (lab .+= 1)
-    return canong, canonperm, orbits, statistics
-end
-function _nauty(g::SparseNautyGraph{D}, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics()) where {D}
-    lab, ptn = vertexlabels2labptn(g.labels)
     orbits = zeros(Cint, nv(g))
-    canong = SparseGraphRep()
+    canong = if g isa DenseNautyGraph 
+        Graphset{wordtype(g)}(g.graphset.n, g.graphset.m)
+    else
+        SparseGraphRep()
+    end
 
     _ccall_nauty(g, lab, ptn, orbits, options, statistics, canong)
     canonperm = (lab .+= 1)
@@ -157,9 +150,9 @@ end
 
 Reorder `g`'s vertices into canonical order and return the permutation used.
 """
-function canonize!(::AbstractNautyGraph) end
+function canonize! end
 
-function canonize!(g::DenseNautyGraph)
+function canonize!(g::AbstractNautyGraph)
     iscanon(g) && return canonical_permutation(g)
     canong, canonperm, _ = _nauty(g)
     _copycanon!(g, canong, canonperm)
@@ -174,7 +167,8 @@ function _copycanon!(g::DenseNautyGraph, canong::Graphset, canonperm)
 end
 function _copycanon!(g::SparseNautyGraph, canong::SparseGraphRep, canonperm)
     _unsafe_copyfromsparsegraphrep!(g, canong)
-    permute!(g.labels, canonperm)
+    permute!(g._labels, canonperm)
+    g.iscanon = true
     return
 end
 

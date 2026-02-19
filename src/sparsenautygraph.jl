@@ -211,14 +211,17 @@ end
 function Graphs.edges(g::SparseNautyGraph)
     return SimpleEdgeIter(g)
 end
-eltype(::Type{SimpleEdgeIter{<:SparseNautyGraph}}) = Graphs.SimpleGraphEdge{Int}
-function Base.iterate(eit::SimpleEdgeIter{G}) where {G<:SparseNautyGraph}
+Base.eltype(::Type{<:SimpleEdgeIter{<:SparseNautyGraph{false}}}) = Graphs.SimpleGraphEdge{Int}
+Base.eltype(::Type{<:SimpleEdgeIter{<:SparseNautyGraph{true}}}) = Graphs.SimpleDiGraphEdge{Int}
+function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph})
     sortlists!(eit.g)
     return Base.iterate(eit, (1, 1))
 end
-function Base.iterate(eit::SimpleEdgeIter{G}, state) where {G<:SparseNautyGraph}
+function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph}, state)
     g = eit.g
     n = nv(g)
+    n == 0 && return nothing
+
     i, nidx = state
 
     while nidx > g.d[i]

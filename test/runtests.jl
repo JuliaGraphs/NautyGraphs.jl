@@ -7,8 +7,8 @@ using Base.Threads
 rng = Random.Xoshiro(0) 
 
 @testset verbose=true "NautyGraphs" begin
-    include("densenautygraph.jl")
     include("graphset.jl")
+    include("densenautygraph.jl")
 
     include("sparsenautygraph.jl")
 

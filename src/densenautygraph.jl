@@ -192,8 +192,8 @@ end
 function Graphs.edges(g::DenseNautyGraph)
     return SimpleEdgeIter(g)
 end
-eltype(::Type{SimpleEdgeIter{<:DenseNautyGraph{true}}}) = Graphs.SimpleGraphEdge{Int}
-eltype(::Type{SimpleEdgeIter{<:DenseNautyGraph{false}}}) = Graphs.SimpleDiGraphEdge{Int}
+Base.eltype(::Type{<:SimpleEdgeIter{<:DenseNautyGraph{true}}}) = Graphs.SimpleGraphEdge{Int}
+Base.eltype(::Type{<:SimpleEdgeIter{<:DenseNautyGraph{false}}}) = Graphs.SimpleDiGraphEdge{Int}
 function Base.iterate(eit::SimpleEdgeIter{G}, state=(1, 1)) where {G<:DenseNautyGraph}
     g = eit.g
     n = nv(g)

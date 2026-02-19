@@ -129,7 +129,7 @@ function Base.unsafe_convert(::Type{Ref{SparseGraphRep}}, x::Tuple{<:SparseNauty
 end
 
 @generated function sortlists!(g::SparseNautyGraph)
-    # Sort the lists in the graph rep into some reference order
+    # Sort the lists in the graph rep into reference order, as defined by nauty
     return quote
         @ccall $(libnauty(g)).sortlists_sg(Ref(g)::Ref{SparseGraphRep})::Cvoid
     end

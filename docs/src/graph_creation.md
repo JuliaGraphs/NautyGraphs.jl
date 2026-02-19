@@ -31,7 +31,7 @@ g1 == g2 == g3 # true
 true
 ```
 ### Sparse nauty graphs
-In addition to the standard, dense `NautyGraph` format, `NautyGraphs` also supports the sparse `SpNautyGraph` and `SpNautyDiGraph` representations. These sparse representation behave in exactly the same way as dense `NautyGraph`s and `NautyDiGraph`s, but they store the underyling graph information as a sparse adjecency list. This can lead to faster isomorphism checks for graphs with few edges. However, the memory layout of `SpNautyGraph` can be inefficient, especially if they are modified repeatedly. In some cases, it may be more efficient to operate on regular `Graph`s from `Graphs.jl` and only convert to a `SpNautyGraph` before `nauty` is called.
+In addition to the standard, dense `NautyGraph` format, `NautyGraphs` also supports the sparse `SpNautyGraph` and `SpNautyDiGraph` representations. These sparse representation behave in exactly the same way as dense `NautyGraph`s and `NautyDiGraph`s, but they store the underyling graph information as a sparse adjacency list. This can lead to faster isomorphism checks for graphs with few edges. However, the memory layout of `SpNautyGraph` can be inefficient, especially if they are modified repeatedly. In some cases, it may be more efficient to operate on regular `Graph`s from `Graphs.jl` and only convert to a `SpNautyGraph` before `nauty` is called.
 
 ### Setting vertex labels
 
@@ -75,7 +75,7 @@ g5 = NautyDiGraph(4; vertex_labels=[0, 5, 20, 8])
 add_edge!(g5, 1, 2)
 add_edge!(g5, Edge(3, 4))
 
-# Vertex lables here are optional, the default is zero.
+# Vertex labels here are optional, the default is zero.
 add_vertex!(g5; vertex_label=42) # note the singular "vertex_label"
 add_vertices!(g5, 3; vertex_labels=[7, 7, 7]) # note the plural "vertex_labels"
 

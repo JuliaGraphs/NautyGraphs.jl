@@ -54,6 +54,8 @@ julia> g == h
 true
 ```
 
+A sparse graph format is also available via `SpNautyGraph`.
+
 ## See also
 - [_nauty_ & _traces_](https://pallini.di.uniroma1.it/)
 - [Nauty.jl](https://github.com/bovine3dom/Nauty.jl)

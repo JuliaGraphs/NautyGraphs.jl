@@ -30,11 +30,12 @@ g1 == g2 == g3 # true
 # output
 true
 ```
-TODO: conversion from and to regular graphs!!
+### Sparse nauty graphs
+In addition to the standard, dense `NautyGraph` format, `NautyGraphs` also supports the sparse `SpNautyGraph` and `SpNautyDiGraph` representations. These sparse representation behave in exactly the same way as dense `NautyGraph`s and `NautyDiGraph`s, but they store the underyling graph information as a sparse adjecency list. This can lead to faster isomorphism checks for graphs with few edges. However, the memory layout of `SpNautyGraph` can be inefficient, especially if they are modified repeatedly. In some cases, it may be more efficient to operate on regular `Graph`s from `Graphs.jl` and only convert to a `SpNautyGraph` before `nauty` is called.
 
 ### Setting vertex labels
 
-There is one difference to `Graphs.jl`, in that `NautyGraphs` are inherently __labeled__, meaning that every vertex carries and integer label.
+There is one difference to `Graphs.jl`, in that `NautyGraph`s are inherently __labeled__, meaning that every vertex carries and integer label.
 If labels are not explicitly provided, they are set to zero. Here is an example that sets vertex labels during graph creation:
 
 ```jldoctest default

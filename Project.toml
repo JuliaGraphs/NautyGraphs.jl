@@ -6,16 +6,12 @@ authors = ["Maximilian HUEBL <maximilian.huebl@ist.ac.at>"]
 [deps]
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 nauty_jll = "55c6dc9b-343a-50ca-8ff2-b71adb3733d5"
 
 [compat]
 Graphs = "1.9"
 LinearAlgebra = "1"
-Random = "1.11.0"
 SHA = "0.7, 1"
-Test = "1.11.0"
 julia = "1.10"
 nauty_jll = "2.8.9"

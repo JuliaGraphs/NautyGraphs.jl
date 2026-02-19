@@ -1,10 +1,11 @@
 mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
-    nv::Int             # number of vertices
-    nde::Int            # number of directed edges
-    v::Vector{Csize_t}  # edgelist positions of vertices (zero-based)
-    d::Vector{Cint}     # vertex degrees
-    e::Vector{Cint}     # edgelist (zero-based)
-    labels::Vector{Int} # vertex labels
+    nv::Int              # number of vertices
+    nde::Int             # number of directed edges
+    v::Vector{Csize_t}   # positions of vertices in edgelist (zero-based)
+    d::Vector{Cint}      # vertex degrees
+    e::Vector{Cint}      # edgelist (zero-based)
+    _labels::Vector{Int} # vertex labels
+    iscanon::Bool
 end
 
 """
@@ -25,7 +26,17 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, n)
     end
-    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels)
+    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false)
+end
+
+"""
+    SparseNautyGraph{D}(; vertex_labels) where {D}
+
+Construct a vertex-labeled `SparseNautyGraph` on `length(vertex_labels)` vertices and 0 edges.
+Can be directed (`D = true`) or undirected (`D = false`).
+"""
+function SparseNautyGraph{D}(; vertex_labels) where {D}
+    return SparseNautyGraph{D}(length(vertex_labels); vertex_labels)
 end
 
 """
@@ -104,6 +115,9 @@ function SparseGraphRep()
     return SparseGraphRep(0, C_NULL, 0, C_NULL, C_NULL, C_NULL, 0, 0, 0, 0)
 end
 
+libnauty(::SparseGraphRep) = nauty_jll.libnautyTL
+libnauty(::Type{SparseGraphRep}) = nauty_jll.libnautyTL
+
 function Base.cconvert(::Type{Ref{SparseGraphRep}}, sref::Ref{<:SparseNautyGraph})
     s = sref[]
     cstr = SparseGraphRep(s.nde, pointer(s.v), s.nv, pointer(s.d), pointer(s.e), C_NULL, length(s.v), length(s.d), length(s.e), 0)
@@ -121,15 +135,16 @@ end
     end
 end
 
-Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g.labels))
+Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
     copy!(dest.v, src.v)
     copy!(dest.d, src.d)
     copy!(dest.e, src.e)
-    copy!(dest.labels, src.labels)
+    copy!(dest._labels, src._labels)
 
-    dest.ne = src.ne
+    dest.nv = src.nv
     dest.nde = src.nde
+    dest.iscanon = src.iscanon
     return dest
 end
 
@@ -137,12 +152,18 @@ Base.show(io::Core.IO, g::SparseNautyGraph{false}) = print(io, "{$(nv(g)), $(ne(
 Base.show(io::Core.IO, g::SparseNautyGraph{true}) = print(io, "{$(nv(g)), $(ne(g))} directed SparseNautyGraph")
 
 function Base.hash(g::SparseNautyGraph, h::UInt)
-    return hash(g.labels, hash(vertices(g), hash(edges(g), h)))
+    return hash(labels(g), hash(vertices(g), hash(edges(g), h)))
 end
 
 @generated function Base.:(==)(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1, D2}
     return quote D1 == D2 && 
     labels(g) == labels(h) && 
+    Bool(@ccall $(libnauty(g)).aresame_sg(Ref(g)::Ref{SparseGraphRep}, Ref(h)::Ref{SparseGraphRep})::Cint)
+    end
+end
+
+@generated function Base.:(==)(g::SparseGraphRep, h::SparseGraphRep)
+    return quote 
     Bool(@ccall $(libnauty(g)).aresame_sg(Ref(g)::Ref{SparseGraphRep}, Ref(h)::Ref{SparseGraphRep})::Cint)
     end
 end
@@ -262,6 +283,12 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph}) = e2 == e1
+function Base.hash(edgeiter::SimpleEdgeIter{<:SparseNautyGraph}, h::UInt=zero(UInt))
+    for edge in edgeiter
+        h = hash(edge, h)
+    end
+    return h
+end
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D
 Graphs.is_directed(::Type{SparseNautyGraph{D}}) where {D} = D
@@ -309,7 +336,7 @@ function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     # otherwise insert j and shift the other indices
     else
         insert!(g.e, idx, j - 1)
-        @views @. g.v[1:end != i] = ifelse(g.v[1:end != i] >= idx-1, g.v[1:end != i]+1, g.v[1:end != i])
+        @views @. g.v[1:end != i] = ifelse(g.v[1:end != i] >= idx-1, g.v[1:end != i] + 1, g.v[1:end != i])
     end
     g.d[i] += 1
     g.nde += 1
@@ -353,16 +380,17 @@ function Graphs.add_vertices!(g::SparseNautyGraph, n::Integer; vertex_labels=0)
     nnew = nold + n
     resize!(g.v, nnew)
     resize!(g.d, nnew)
-    resize!(g.labels, nnew)
+    resize!(g._labels, nnew)
 
     g.v[nold+1:end] .= 0
     g.d[nold+1:end] .= 0
-    g.labels[nold+1:end] .= vertex_labels
+    g._labels[nold+1:end] .= vertex_labels
 
     g.nv = nnew
-    return true
+    return n
 end
 Graphs.add_vertex!(g::SparseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
+Graphs.add_vertices!(g::SparseNautyGraph; vertex_labels=0) = Graphs.add_vertices!(g, length(vertex_labels); vertex_labels)
 
 function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
     isempty(inds) && return true
@@ -387,7 +415,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
     end
     deleteat!(g.v, inds)
     deleteat!(g.d, inds)
-    deleteat!(g.labels, inds)
+    deleteat!(g._labels, inds)
 
     # shift vertices in edge list
     for i in eachindex(g.e)
@@ -399,6 +427,19 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
     return true
 end
 Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, (i,))
+
+function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1,D2}
+    nv = g.nv + h.nv
+    nde = g.nde + h.nde
+    v = [g.v; h.v .+ length(g.e)]
+    d = [g.d; h.d]
+    e = [g.e; h.e .+ g.nv]
+    labels = [g._labels; h._labels]
+    iscanon = false
+
+    D = D1 || D2
+    return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon)
+end
 
 
 function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphRep)

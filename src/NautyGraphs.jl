@@ -16,7 +16,8 @@ include("nauty.jl")
 
 const NautyGraph = DenseNautyGraph{false}
 const NautyDiGraph = DenseNautyGraph{true}
-
+const SpNautyGraph = SparseNautyGraph{false}
+const SpNautyDiGraph = SparseNautyGraph{true}
 
 function __init__()
     # global default options to nauty carry a pointer reference that needs to be initialized at runtime
@@ -47,6 +48,8 @@ export
     AbstractNautyGraph,
     NautyGraph,
     NautyDiGraph,
+    SpNautyGraph,
+    SpNautyDiGraph,
     DenseNautyGraph,
     SparseNautyGraph,
     AutomorphismGroup,

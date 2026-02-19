@@ -124,11 +124,11 @@ Compute a graph `g`'s canonical form and automorphism group.
 """
 function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
-        error("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed.")
+        throw(ArgumentError("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed."))
     end
     if !isone(options.getcanon)
         # Right now, all implemented functionality is based on computing the canonical form, so it makes no sense to run nauty without computing it.
-        error("`options.getcanon` needs to be enabled.")
+        throw(ArgumentError("`options.getcanon` needs to be enabled."))
     end
 
     canong, canonperm, orbits, statistics = _nauty(g, options)

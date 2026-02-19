@@ -1,3 +1,10 @@
+"""
+    SparseNautyGraph{D}
+
+Sparse graph format compatible with nauty. Can be directed (`D = true`) or undirected (`D = false`).
+This graph format stores the adjacency matrix as an edgelist. Repeated modifications to the graph
+may result in suboptimal memory usage.
+"""
 mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
     nv::Int              # number of vertices
     nde::Int             # number of directed edges
@@ -95,6 +102,26 @@ function (::Type{G})(g::AbstractGraph) where {G<:SparseNautyGraph}
     return ng
 end
 
+Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon)
+function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
+    copy!(dest.v, src.v)
+    copy!(dest.d, src.d)
+    copy!(dest.e, src.e)
+    copy!(dest._labels, src._labels)
+
+    dest.nv = src.nv
+    dest.nde = src.nde
+    dest.iscanon = src.iscanon
+    return dest
+end
+
+Base.show(io::Core.IO, g::SparseNautyGraph{false}) = print(io, "{$(nv(g)), $(ne(g))} undirected SparseNautyGraph")
+Base.show(io::Core.IO, g::SparseNautyGraph{true}) = print(io, "{$(nv(g)), $(ne(g))} directed SparseNautyGraph")
+
+function Base.hash(g::SparseNautyGraph, h::UInt)
+    return hash(labels(g), hash(vertices(g), hash(edges(g), h)))
+end
+
 libnauty(::SparseNautyGraph) = nauty_jll.libnautyTL
 libnauty(::Type{<:SparseNautyGraph}) = nauty_jll.libnautyTL
 
@@ -135,24 +162,22 @@ end
     end
 end
 
-Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon)
-function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
-    copy!(dest.v, src.v)
-    copy!(dest.d, src.d)
-    copy!(dest.e, src.e)
-    copy!(dest._labels, src._labels)
-
-    dest.nv = src.nv
-    dest.nde = src.nde
-    dest.iscanon = src.iscanon
-    return dest
+function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphRep)
+    copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
+    copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
+    copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
+    return
 end
-
-Base.show(io::Core.IO, g::SparseNautyGraph{false}) = print(io, "{$(nv(g)), $(ne(g))} undirected SparseNautyGraph")
-Base.show(io::Core.IO, g::SparseNautyGraph{true}) = print(io, "{$(nv(g)), $(ne(g))} directed SparseNautyGraph")
-
-function Base.hash(g::SparseNautyGraph, h::UInt)
-    return hash(labels(g), hash(vertices(g), hash(edges(g), h)))
+function _free_sparsegraphrep(srep::SparseGraphRep)
+    _sparsenautyfree(srep.e)
+    _sparsenautyfree(srep.v)
+    _sparsenautyfree(srep.d)
+    return
+end
+@generated function _sparsenautyfree(arr::Ptr{T}) where {T}
+    return quote
+        @ccall $(libnauty(SparseNautyGraph)).free(arr::Ptr{T})::Cvoid
+    end
 end
 
 @generated function Base.:(==)(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1, D2}
@@ -442,23 +467,4 @@ function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) wher
 
     D = D1 || D2
     return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon)
-end
-
-
-function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphRep)
-    copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
-    copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
-    copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
-    return
-end
-function _free_sparsegraphrep(srep::SparseGraphRep)
-    _sparsenautyfree(srep.e)
-    _sparsenautyfree(srep.v)
-    _sparsenautyfree(srep.d)
-    return
-end
-@generated function _sparsenautyfree(arr::Ptr{T}) where {T}
-    return quote
-        @ccall $(libnauty(SparseNautyGraph)).free(arr::Ptr{T})::Cvoid
-    end
 end

@@ -363,6 +363,44 @@ end
         end
     end
 
+    @testset "conversion" begin
+        ng = NautyGraph(; vertex_labels=1:5)
+        add_edge!(ng, 1, 2)
+        add_edge!(ng, 3, 4)
+
+        spng = SpNautyGraph(ng)
+        ng2 = NautyGraph(spng)
+        @test ng == ng2
+
+        ng = NautyDiGraph(; vertex_labels=1:5)
+        add_edge!(ng, 1, 2)
+        add_edge!(ng, 3, 4)
+
+        spng = SpNautyDiGraph(ng)
+        ng2 = NautyDiGraph(spng)
+        @test ng == ng2
+
+        for G in (NautyGraph, SpNautyGraph)
+            ng = G(5)
+            add_edge!(ng, 1, 2)
+            add_edge!(ng, 3, 4)
+
+            g = Graph(ng)
+            ng2 = G(g)
+            @test ng == ng2
+        end
+
+        for G in (NautyDiGraph, SpNautyDiGraph)
+            ng = G(5)
+            add_edge!(ng, 1, 2)
+            add_edge!(ng, 3, 4)
+
+            g = DiGraph(ng)
+            ng2 = G(g)
+            @test ng == ng2
+        end
+    end
+
     ## Edge iterator 
     @testset "edge iterator" begin
         A = [0 1 0 0;

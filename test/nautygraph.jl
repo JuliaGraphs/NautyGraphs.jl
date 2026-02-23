@@ -247,10 +247,10 @@ end
         @test labels(g1) == vcat([0, 0, 0, 0])
 
         g2 = copy(g1)
-        setlabels!(g2, [1, 4, 5, 10])
+        @test setlabels!(g2, [1, 4, 5, 10]) ==[1, 4, 5, 10]
         @test labels(g2) == [1, 4, 5, 10]
 
-        setlabel!(g2, 1, 99)
+        @test setlabel!(g2, 1, 99) == 99
         @test labels(g2) == [99, 4, 5, 10]
 
         g3 = copy(g2)
@@ -500,8 +500,8 @@ end
             @test vertices(g1) != vertices(ng1)
             @test vertices(g1) != vertices(spng1)
 
-            rem_vertices!(ng1, rv)
-            rem_vertices!(spng1, rv)
+            @test rem_vertices!(ng1, rv) == true
+            @test rem_vertices!(spng1, rv) == true
 
             vertexedge_test(g1, ng1, spng1; edge_equal=true, vertex_equal=true)
 
@@ -515,8 +515,8 @@ end
                 rem_edge!(g2, edge)
                 vertexedge_test(g2, ng2, spng2; edge_equal=false, vertex_equal=true)
 
-                rem_edge!(ng2, edge)
-                rem_edge!(spng2, edge)
+                @test rem_edge!(ng2, edge) == true
+                @test rem_edge!(spng2, edge) == true
                 vertexedge_test(g2, ng2, spng2; edge_equal=true, vertex_equal=true)
 
                 # test that all inactive bits in the graphset are zero
@@ -526,15 +526,15 @@ end
             add_vertex!(g3)
             vertexedge_test(g3, ng3, spng3; edge_equal=true, vertex_equal=false)
 
-            add_vertex!(spng3)
-            add_vertex!(ng3)
+            @test add_vertex!(spng3) == true
+            @test add_vertex!(ng3) == true
             vertexedge_test(g3, ng3, spng3; edge_equal=true, vertex_equal=true)
 
             add_edge!(g3, 1, nv(g3))
             vertexedge_test(g3, ng3, spng3; edge_equal=false, vertex_equal=true)
 
-            add_edge!(spng3, 1, nv(spng3))
-            add_edge!(ng3, 1, nv(ng3))
+            @test add_edge!(spng3, 1, nv(spng3)) == true
+            @test add_edge!(ng3, 1, nv(ng3)) == true
             vertexedge_test(g3, ng3, spng3; edge_equal=true, vertex_equal=true)
 
             # test that all inactive bits in the graphset are zero
@@ -543,15 +543,15 @@ end
             add_vertices!(g4, 10)
             vertexedge_test(g4, ng4, spng4; edge_equal=true, vertex_equal=false)
 
-            add_vertices!(spng4, 10)
-            add_vertices!(ng4, 10)
+            @test add_vertices!(spng4, 10) == 10
+            @test add_vertices!(ng4, 10) == 10
             vertexedge_test(g4, ng4, spng4; edge_equal=true, vertex_equal=true)
 
             add_edge!(g4, 1, nv(g4))
             vertexedge_test(g4, ng4, spng4; edge_equal=false, vertex_equal=true)
 
-            add_edge!(spng4, 1, nv(ng4))
-            add_edge!(ng4, 1, nv(spng4))
+            @test add_edge!(spng4, 1, nv(ng4)) == true
+            @test add_edge!(ng4, 1, nv(spng4)) == true
             vertexedge_test(g4, ng4, spng4; edge_equal=true, vertex_equal=true)
 
             # test that all inactive bits in the graphset are zero

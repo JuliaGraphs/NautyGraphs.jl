@@ -166,6 +166,12 @@ end
         @ccall $(libnauty(g)).sortlists_sg(Ref(g)::Ref{SparseGraphRep})::Cvoid
     end
 end
+@generated function sortlists!(g::SparseGraphRep)
+    # Sort the lists in the graph rep into reference order, as defined by nauty
+    return quote
+        @ccall $(libnauty(g)).sortlists_sg(Ref(g)::Ref{SparseGraphRep})::Cvoid
+    end
+end
 
 function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphRep)
     copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))

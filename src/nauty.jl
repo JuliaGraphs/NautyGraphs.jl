@@ -222,7 +222,7 @@ Hash the canonical version of `g`, using the first 128 bits returned by the SHA2
 The canonical id has the property that `is_isomorphic(g1, g2) == true` implies `canonical_id(g1) == canonical_id(g2)`. The converse usually holds as well, 
 but in very rare cases, hash collisions may cause non-isomorphic graphs to have the same canonical id. 
 """
-function canonical_id end
+function canonical_id(g::AbstractNautyGraph) end
 
 function canonical_id(g::DenseNautyGraph)
     if iscanon(g)
@@ -230,6 +230,20 @@ function canonical_id(g::DenseNautyGraph)
     else
         canong, canonperm, _ = _nauty(g)
         return _SHAhash(canong, @view g._labels[canonperm])
+    end
+end
+
+function canonical_id(g::SparseNautyGraph)
+    # needs to work for 0 vertices
+    if iscanon(g)
+        sortlists!(g)
+        return _SHAhash((_fadj_0based(g, i) for i in 1:nv(g))..., g._labels)
+    else
+        canong, canonperm, _ = _nauty(g)
+        sortlists!(canong)
+        h = _SHAhash((_fadj_0based(canong, i) for i in 1:nv(g))..., @view g._labels[canonperm])
+        _free_sparsegraphrep(canong)
+        return h
     end
 end
 

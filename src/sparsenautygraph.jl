@@ -15,6 +15,8 @@ mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
     iscanon::Bool
 end
 
+const NONEIGHBOR = -1
+
 """
     SparseNautyGraph{D}(n::Integer; [vertex_labels, ne=n]) where {D}
 
@@ -29,7 +31,7 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     end
     v = zeros(n)
     d = zeros(Cint, n)
-    e = -ones(Cint, ne) # encode unused values as -1
+    e = NONEIGHBOR * ones(Cint, ne) # encode unused values as NONEIGHBOR (== -1)
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, n)
     end
@@ -225,6 +227,13 @@ end
     # the resulting indices are zero-based
     return @view g.e[(zero2one(g.v[v])):(g.v[v] + g.d[v])]
 end
+@inline function _fadj_0based(g::SparseGraphRep, v::Integer)
+    # the resulting indices are zero-based
+    es = unsafe_wrap(Array, g.e, g.elen)
+    vs = unsafe_wrap(Array, g.v, g.vlen)
+    ds = unsafe_wrap(Array, g.d, g.dlen)
+    return @view es[(zero2one(vs[v])):(vs[v] + ds[v])]
+end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
     return (zero2one(g.e[i]) for i in (zero2one(g.v[v])):(g.v[v] + g.d[v]))
@@ -361,8 +370,6 @@ function trim_edgelist!(g::SparseNautyGraph)
     return excess_length
 end
 
-const NONEIGHBOR = -1
-
 function Graphs.add_edge!(g::SparseNautyGraph, e::Edge)
     has_vertex(g, e.src) && has_vertex(g, e.dst) || return false
     has_edge(g, e.src, e.dst) && return false # TODO this checks has_vertex again
@@ -371,6 +378,7 @@ function Graphs.add_edge!(g::SparseNautyGraph, e::Edge)
     if !is_directed(g) && e.src != e.dst
         _add_directed_edge!(g, e.dst, e.src)
     end
+    g.iscanon = false
     return true
 end
 function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
@@ -411,6 +419,7 @@ function Graphs.rem_edge!(g::SparseNautyGraph, e::Edge)
     if !is_directed(g) && e.src != e.dst
         _rem_directed_edge!(g, e.dst, e.src)
     end
+    g.iscanon = false
     return true
 end
 function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
@@ -431,6 +440,7 @@ function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     end
     g.d[i] -= 1
     g.nde -= 1
+    g.iscanon = false
     return true
 end
 
@@ -448,6 +458,7 @@ function Graphs.add_vertices!(g::SparseNautyGraph, n::Integer; vertex_labels=0)
     g._labels[nold+1:end] .= vertex_labels
 
     g.nv = nnew
+    g.iscanon = false
     return n
 end
 Graphs.add_vertex!(g::SparseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
@@ -485,6 +496,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
 
     g.nv = length(g.v)
     g.nde = sum(!=(NONEIGHBOR), g.e; init=0)
+    g.iscanon = false
     return true
 end
 Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, (i,))

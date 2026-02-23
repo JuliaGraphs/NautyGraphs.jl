@@ -12,6 +12,6 @@ rng = Random.Xoshiro(0)
 
     include("nauty.jl")
     include("interface.jl")
-    VERSION == v"1.12" && include("aqua.jl")
-    VERSION == v"1.12" && include("jet.jl")
+    VERSION >= v"1.12" && include("aqua.jl")
+    VERSION >= v"1.12" && include("jet.jl")
 end

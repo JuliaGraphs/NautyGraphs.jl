@@ -125,6 +125,9 @@ end
 libnauty(::SparseNautyGraph) = nauty_jll.libnautyTL
 libnauty(::Type{<:SparseNautyGraph}) = nauty_jll.libnautyTL
 
+@inline one2zero(x) = x - one(x)
+@inline zero2one(x) = x + one(x)
+
 # C-compatible representation of a sparsenautygraph
 mutable struct SparseGraphRep
     nde::Csize_t
@@ -220,11 +223,11 @@ end
 @inline function _fadj_0based(g::SparseNautyGraph, v::Integer)
     # return the adjacency of vertex `v` as a view into the edge list
     # the resulting indices are zero-based
-    return @view g.e[(1 + g.v[v]):(g.v[v] + g.d[v])]
+    return @view g.e[(zero2one(g.v[v])):(g.v[v] + g.d[v])]
 end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
-    return (1 + g.e[i] for i in (1 + g.v[v]):(g.v[v] + g.d[v]))
+    return (zero2one(g.e[i]) for i in (zero2one(g.v[v])):(g.v[v] + g.d[v]))
 end
 @inline function Graphs.indegree(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
@@ -257,7 +260,7 @@ function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph}, state)
         i > n && return nothing
     end
 
-    w = 1 + g.e[g.v[i] + nidx]
+    w = zero2one(g.e[g.v[i] + nidx])
 
     if !is_directed(g) && w < i && has_edge(g, i, w)
         return Base.iterate(eit, (i, nidx + 1))
@@ -297,15 +300,15 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     m = min(nv(g), nv(h))
     
     for i in 1:m
-        neighs_g = NautyGraphs._fadj_0based(g, i)
+        neighs_g = _fadj_0based(g, i)
         neighs_h = Graphs.SimpleGraphs.fadj(h, i)
         length(neighs_g) == length(neighs_h) || return false
-        all(ngh -> 1 + ngh[1] == ngh[2], zip(neighs_g, neighs_h)) || return false
+        all(ngh -> zero2one(ngh[1]) == ngh[2], zip(neighs_g, neighs_h)) || return false
     end
 
     nv(g) == nv(h) && return true
     for i in (m + 1):nv(g)
-        isempty(NautyGraphs._fadj_0based(g, i)) || return false
+        isempty(_fadj_0based(g, i)) || return false
     end
     for i in (m + 1):nv(h)
         isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
@@ -322,17 +325,17 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     m = min(nv(g), nv(h))
     for i in 1:m
         neighs_g = outneighbors(g, i)
-        neighs_h = NautyGraphs._fadj_0based(h, i)
+        neighs_h = _fadj_0based(h, i)
         length(neighs_g) == length(neighs_h) || return false
-        all(ngh -> ngh[1] == 1 + ngh[2], zip(neighs_g, neighs_h)) || return false
+        all(ngh -> ngh[1] == zero2one(ngh[2]), zip(neighs_g, neighs_h)) || return false
     end
     nv(g) == nv(h) && return true
 
-    all(iszero, g.graphset[m+1:end, :]) || return false
-    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
+    all(iszero, @view g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, @view g.graphset[1:m, m+1:end]) || return false
 
     for i in (m + 1):nv(h)
-        isempty(NautyGraphs._fadj_0based(h, i)) || return false
+        isempty(_fadj_0based(h, i)) || return false
     end
     return true
 end
@@ -371,7 +374,7 @@ function Graphs.add_edge!(g::SparseNautyGraph, e::Edge)
     return true
 end
 function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
-    idx = Int(1 + g.v[i] + g.d[i])
+    idx = Int(zero2one(g.v[i] + g.d[i]))
 
     # If this is the first edge of vertex i
     # find a free spot to start its neighborlist
@@ -381,16 +384,20 @@ function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
         if isnothing(idx)
             idx = length(g.e) + 1
         end
-        g.v[i] = idx - 1
+        g.v[i] = one2zero(idx)
     end
 
     # If there is a free spot at the end of the list, append j
     if idx in eachindex(g.e) && g.e[idx] == NONEIGHBOR
-        g.e[idx] = j - 1
+        g.e[idx] = one2zero(j)
     # otherwise insert j and shift the other indices
     else
-        insert!(g.e, idx, j - 1)
-        @views @. g.v[1:end != i] = ifelse(g.v[1:end != i] >= idx-1, g.v[1:end != i] + 1, g.v[1:end != i])
+        insert!(g.e, idx, one2zero(j))
+        for k in eachindex(g.v)
+            k == i && continue
+            g.v[k] = ifelse(g.v[k] >= one2zero(idx), g.v[k] + 1, g.v[k])
+        end
+        # @views @. g.v[1:end != i] = ifelse(g.v[1:end != i] >= one2zero(idx), zero2one(g.v[1:end != i]), g.v[1:end != i])
     end
     g.d[i] += 1
     g.nde += 1
@@ -407,12 +414,12 @@ function Graphs.rem_edge!(g::SparseNautyGraph, e::Edge)
     return true
 end
 function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
-    v, d = 1 + g.v[i], g.d[i]
-    idx = findfirst(==(j - 1), @view g.e[v:v+d-1])
+    v, d = zero2one(g.v[i]), g.d[i]
+    idx = findfirst(==(one2zero(j)), @view g.e[v:v+d-1])
     isnothing(idx) && return false
 
-    vrem = v + idx - 1
-    vlast = v + d - 1
+    vrem = one2zero(v + idx)
+    vlast = one2zero(v + d)
 
     if idx == d
         g.e[vrem] = NONEIGHBOR
@@ -452,14 +459,14 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
 
     for i in vertices(g)
         if i in inds
-            vstart, d = 1 + g.v[i], g.d[i]
+            vstart, d = zero2one(g.v[i]), g.d[i]
             d == 0 && continue
 
             vend = vstart + d - 1
             # Free memory for outneighbors
             deleteat!(g.e, vstart:vend)
             # TODO: this redundantly shifts indices that will be deleted below
-            @. g.v = ifelse(g.v > vend - 1, g.v - d, g.v)
+            @. g.v = ifelse(g.v > one2zero(vend), g.v - d, g.v)
         else
             # Keep memory for inneighbors
             for j in inds
@@ -473,7 +480,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
 
     # shift vertices in edge list
     for i in eachindex(g.e)
-        g.e[i] -= sum(<(1 + g.e[i]), inds)
+        g.e[i] -= sum(<(zero2one(g.e[i])), inds)
     end
 
     g.nv = length(g.v)

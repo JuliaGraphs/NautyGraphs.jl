@@ -142,14 +142,22 @@ Return the label of vertex `i` of `g`.
 
 Set the vertex labels of `g` equal to `vertex_labels`.
 """
-@inline setlabels!(g::AbstractNautyGraph, vertex_labels) = (g.iscanon = false; g._labels .= vertex_labels)
+function setlabels!(g::AbstractNautyGraph, vertex_labels)
+    g.iscanon = false
+    g._labels .= vertex_labels
+    return 
+end
 
 """
     setlabel!(g::AbstractNautyGraph, i::Integer, vertex_label)
 
 Set the label of vertex `i` of `g` equal to `vertex_label`.
 """
-@inline setlabel!(g::AbstractNautyGraph, index::Integer, vertex_label) = (g.iscanon = false; g._labels[index] = vertex_label)
+function setlabel!(g::AbstractNautyGraph, index::Integer, vertex_label)
+    g.iscanon = false
+    g._labels[index] = vertex_label
+    return 
+end
 
 """
     iscanon(g::AbstractNautyGraph)

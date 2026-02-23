@@ -82,3 +82,4 @@ canonized graphs, and falling back to equality checks if a hash collision is fou
 
 If you want to compare graph hashes without checking for collisions, it is strongly recommended to hash graphs using the `canonical_id` function, with returns the first 128 bits of
 the cryptographically secure SHA256 hash algorithm. This should provide sufficient collision resistance for most applications.
+However, note that the output of`canonical_id` depends on the type of the input graph, meaning that `canonical_id(g1::NautyGraph)` will not be equal to `canonical_id(g2::SpNautyGraph)`, even if `g1` and `g2` are isomorphic to each other. If required, you need to manually convert the graphs to the same type. 

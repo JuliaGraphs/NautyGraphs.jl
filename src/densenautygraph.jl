@@ -214,14 +214,14 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     ne(g) == ne(h) || return false
     m = min(nv(g), nv(h))
 
-    g.graphset[1:m, 1:m] == h.graphset[1:m, 1:m] || return false
+    @views all(g.graphset[1:m, 1:m] .== h.graphset[1:m, 1:m]) || return false
     nv(g) == nv(h) && return true
 
-    g.graphset[m+1:end, :] == 0 || return false
-    is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
 
-    h.graphset[m+1:end, :] == 0 || return false
-    is_directed(h) || h.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, h.graphset[m+1:end, :]) || return false
+    is_directed(h) || all(iszero, h.graphset[1:m, m+1:end]) || return false
     return true
 end
 function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph})
@@ -233,20 +233,14 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     m = min(nv(g), nv(h))
     for i in 1:m
         outneighbors(g, i) == Graphs.SimpleGraphs.fadj(h, i) || return false
-        if is_directed(h)
-            inneighbors(g, i) == Graphs.SimpleGraphs.badj(h, i) || return false
-        end
     end
     nv(g) == nv(h) && return true
 
-    g.graphset[m+1:end, :] == 0 || return false
-    is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
 
     for i in (m + 1):nv(h)
         isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
-        if is_directed(h)
-            isempty(Graphs.SimpleGraphs.badj(h, i)) || return false
-        end
     end
     return true
 end

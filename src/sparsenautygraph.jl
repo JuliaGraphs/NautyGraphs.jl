@@ -217,7 +217,9 @@ end
     # following the Graph.jl implementation, there is no boundscheck here
     return g.d[v]
 end
-@inline function fadj(g::SparseNautyGraph, v::Integer)
+@inline function _fadj_0based(g::SparseNautyGraph, v::Integer)
+    # return the adjacency of vertex `v` as a view into the edge list
+    # the resulting indices are zero-based
     return @view g.e[(1 + g.v[v]):(g.v[v] + g.d[v])]
 end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
@@ -273,14 +275,14 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     m = min(nv(g), nv(h))
 
     for i in 1:m
-        fadj(g, i) == fadj(h, i) || return false
+        _fadj_0based(g, i) == _fadj_0based(h, i) || return false
     end
     nv(g) == nv(h) && return true
     for i in (m + 1):nv(g)
-        isempty(fadj(g, i)) || return false
+        isempty(_fadj_0based(g, i)) || return false
     end
     for i in (m + 1):nv(h)
-        isempty(fadj(h, i)) || return false
+        isempty(_fadj_0based(h, i)) || return false
     end
     return true
 end
@@ -295,7 +297,7 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     m = min(nv(g), nv(h))
     
     for i in 1:m
-        neighs_g = NautyGraphs.fadj(g, i)
+        neighs_g = NautyGraphs._fadj_0based(g, i)
         neighs_h = Graphs.SimpleGraphs.fadj(h, i)
         length(neighs_g) == length(neighs_h) || return false
         all(ngh -> 1 + ngh[1] == ngh[2], zip(neighs_g, neighs_h)) || return false
@@ -303,7 +305,7 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
 
     nv(g) == nv(h) && return true
     for i in (m + 1):nv(g)
-        isempty(NautyGraphs.fadj(g, i)) || return false
+        isempty(NautyGraphs._fadj_0based(g, i)) || return false
     end
     for i in (m + 1):nv(h)
         isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
@@ -311,6 +313,30 @@ function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph}) = e2 == e1
+function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph})
+    g = e1.g
+    h = e2.g
+    ne(g) == ne(h) || return false
+    is_directed(g) == is_directed(h) || return false
+
+    m = min(nv(g), nv(h))
+    for i in 1:m
+        neighs_g = outneighbors(g, i)
+        neighs_h = NautyGraphs._fadj_0based(h, i)
+        length(neighs_g) == length(neighs_h) || return false
+        all(ngh -> ngh[1] == 1 + ngh[2], zip(neighs_g, neighs_h)) || return false
+    end
+    nv(g) == nv(h) && return true
+
+    all(iszero, g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
+
+    for i in (m + 1):nv(h)
+        isempty(NautyGraphs._fadj_0based(h, i)) || return false
+    end
+    return true
+end
+Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:DenseNautyGraph}) = e2 == e1
 function Base.hash(edgeiter::SimpleEdgeIter{<:SparseNautyGraph}, h::UInt=zero(UInt))
     for edge in edgeiter
         h = hash(edge, h)

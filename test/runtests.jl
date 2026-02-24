@@ -7,9 +7,10 @@ using Base.Threads
 rng = Random.Xoshiro(0) 
 
 @testset verbose=true "NautyGraphs" begin
-    include("densenautygraph.jl")
-    include("nauty.jl")
+    include("nautygraph.jl")
     include("graphset.jl")
+
+    include("nauty.jl")
     include("interface.jl")
     VERSION >= v"1.12" && include("aqua.jl")
     VERSION >= v"1.12" && include("jet.jl")

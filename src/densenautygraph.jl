@@ -58,25 +58,23 @@ The graph can be directed (`D = true`) or undirected (`D = false`). If `D = fals
 Vertex labels can optionally be specified.
 """
 function DenseNautyGraph{D,W}(A::AbstractMatrix; vertex_labels=nothing) where {D,W<:Unsigned}
+    n, m = size(A)
+    isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
     graphset = Graphset{W}(A)
     return DenseNautyGraph{D}(graphset; vertex_labels)
 end
 DenseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(A; vertex_labels)
 
-function (::Type{G})(g::AbstractGraph) where {G<:AbstractNautyGraph}
-    ng = G(nv(g))
+function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
+    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g)) : G(nv(g))
     for e in edges(g)
         add_edge!(ng, e)
-        !is_directed(g) && is_directed(ng) && add_edge!(ng, reverse(e))
+        if !is_directed(g) && is_directed(ng)
+            add_edge!(ng, reverse(e))
+        end
     end
     return ng
-end
-function (::Type{G})(g::AbstractNautyGraph) where {G<:AbstractNautyGraph}
-    h = invoke(G, Tuple{AbstractGraph}, g)
-    @views h._labels .= g._labels
-    h.iscanon = g.iscanon
-    return h
 end
 
 """
@@ -101,6 +99,10 @@ function DenseNautyGraph{D,W}(edge_list::Vector{<:AbstractEdge}; vertex_labels=n
 end
 DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(edge_list; vertex_labels)
 
+libnauty(::DenseNautyGraph{D,W}) where {D,W} = libnauty(W)
+libnauty(::Type{DenseNautyGraph{D,W}}) where {D,W} = libnauty(W)
+
+wordtype(g::DenseNautyGraph) = wordtype(g.graphset)
 
 Base.copy(g::G) where {G<:DenseNautyGraph} = G(copy(g.graphset), copy(g._labels), g.ne, g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:DenseNautyGraph}
@@ -118,46 +120,6 @@ Base.hash(g::DenseNautyGraph, h::UInt) = hash(g._labels, hash(g.graphset, h))
 Base.:(==)(g::DenseNautyGraph, h::DenseNautyGraph) = (g.graphset == h.graphset) && (g._labels == h._labels)
 
 # BASIC GRAPH API
-
-"""
-    labels(g::AbstractNautyGraph)
-
-Return the vertex labels of `g`. 
-
-Do not modify the vector of labels returned. Use [`setlabels!`](@ref) or [`setlabel!`](@ref) instead.
-"""
-@inline labels(g::AbstractNautyGraph) = g._labels
-
-"""
-    label(g::AbstractNautyGraph, i::Integer)
-
-Return the label of vertex `i` of `g`.
-"""
-@inline label(g::AbstractNautyGraph, index::Integer) = g._labels[index]
-
-"""
-    setlabels!(g::AbstractNautyGraph, vertex_labels)
-
-Set the vertex labels of `g` equal to `vertex_labels`.
-"""
-@inline setlabels!(g::AbstractNautyGraph, vertex_labels) = (g.iscanon = false; g._labels .= vertex_labels)
-
-"""
-    setlabel!(g::AbstractNautyGraph, i::Integer, vertex_label)
-
-Set the label of vertex `i` of `g` equal to `vertex_label`.
-"""
-@inline setlabel!(g::AbstractNautyGraph, index::Integer, vertex_label) = (g.iscanon = false; g._labels[index] = vertex_label)
-
-"""
-    iscanon(g::AbstractNautyGraph)
-
-Return true if `g` has previously been canonized.
-
-`iscanon(g) == false` does not necessarily imply that `g` is not in canonical form, it just means `g` has never
-been explicitly canonized. This function should be considered internal and may be removed in future versions.
-"""
-@inline iscanon(g::AbstractNautyGraph) = g.iscanon
 
 Graphs.nv(g::DenseNautyGraph) = g.graphset.n
 Graphs.ne(g::DenseNautyGraph) = g.ne
@@ -190,8 +152,8 @@ end
 function Graphs.edges(g::DenseNautyGraph)
     return SimpleEdgeIter(g)
 end
-eltype(::Type{SimpleEdgeIter{<:DenseNautyGraph{true}}}) = Graphs.SimpleGraphEdge{Int}
-eltype(::Type{SimpleEdgeIter{<:DenseNautyGraph{false}}}) = Graphs.SimpleDiGraphEdge{Int}
+Base.eltype(::Type{<:SimpleEdgeIter{<:DenseNautyGraph{true}}}) = Graphs.SimpleGraphEdge{Int}
+Base.eltype(::Type{<:SimpleEdgeIter{<:DenseNautyGraph{false}}}) = Graphs.SimpleDiGraphEdge{Int}
 function Base.iterate(eit::SimpleEdgeIter{G}, state=(1, 1)) where {G<:DenseNautyGraph}
     g = eit.g
     n = nv(g)
@@ -212,14 +174,14 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     ne(g) == ne(h) || return false
     m = min(nv(g), nv(h))
 
-    g.graphset[1:m, 1:m] == h.graphset[1:m, 1:m] || return false
+    @views all(g.graphset[1:m, 1:m] .== h.graphset[1:m, 1:m]) || return false
     nv(g) == nv(h) && return true
 
-    g.graphset[m+1:end, :] == 0 || return false
-    is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
 
-    h.graphset[m+1:end, :] == 0 || return false
-    is_directed(h) || h.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, h.graphset[m+1:end, :]) || return false
+    is_directed(h) || all(iszero, h.graphset[1:m, m+1:end]) || return false
     return true
 end
 function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph})
@@ -231,40 +193,20 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     m = min(nv(g), nv(h))
     for i in 1:m
         outneighbors(g, i) == Graphs.SimpleGraphs.fadj(h, i) || return false
-        if is_directed(h)
-            inneighbors(g, i) == Graphs.SimpleGraphs.badj(h, i) || return false
-        end
     end
     nv(g) == nv(h) && return true
 
-    g.graphset[m+1:end, :] == 0 || return false
-    is_directed(g) || g.graphset[m+1:end, 1:m] == 0 || return false
+    all(iszero, g.graphset[m+1:end, :]) || return false
+    is_directed(g) || all(iszero, g.graphset[1:m, m+1:end]) || return false
 
     for i in (m + 1):nv(h)
         isempty(Graphs.SimpleGraphs.fadj(h, i)) || return false
-        if is_directed(h)
-            isempty(Graphs.SimpleGraphs.badj(h, i)) || return false
-        end
     end
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph}, e2::SimpleEdgeIter{<:DenseNautyGraph}) = e2 == e1
 
 Graphs.is_directed(::Type{<:DenseNautyGraph{D}}) where {D} = D
-Graphs.edgetype(::AbstractNautyGraph) = Graphs.SimpleGraphs.SimpleEdge{Int}
-Base.eltype(::AbstractNautyGraph{T}) where {T} = T
-Base.zero(::G) where {G<:AbstractNautyGraph} = G(0)
-Base.zero(::Type{G}) where {G<:AbstractNautyGraph} = G(0)
-
-function _induced_subgraph(g::DenseNautyGraph, iter)
-    h, vmap = invoke(Graphs.induced_subgraph, Tuple{AbstractGraph,typeof(iter)}, g, iter)
-    @views h._labels .= g._labels[vmap]
-    h.iscanon = false
-    return h, vmap
-end
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{<:Integer}) = _induced_subgraph(g::DenseNautyGraph, iter)
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{Bool}) = _induced_subgraph(g::DenseNautyGraph, iter)
-Graphs.induced_subgraph(g::DenseNautyGraph, iter::AbstractVector{<:AbstractEdge}) = _induced_subgraph(g::DenseNautyGraph, iter)
 
 # GRAPH MODIFY METHODS
 function Graphs.add_edge!(g::DenseNautyGraph, e::Edge)
@@ -278,7 +220,6 @@ function Graphs.add_edge!(g::DenseNautyGraph, e::Edge)
     g.iscanon = false
     return true
 end
-Graphs.add_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.add_edge!(g, edgetype(g)(i, j))
 
 function Graphs.rem_edge!(g::DenseNautyGraph, e::Edge)
     has_vertex(g, e.src) && has_vertex(g, e.dst) || return false
@@ -291,7 +232,6 @@ function Graphs.rem_edge!(g::DenseNautyGraph, e::Edge)
     g.iscanon = false
     return true
 end
-Graphs.rem_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.rem_edge!(g, edgetype(g)(i, j))
 
 function Graphs.add_vertices!(g::DenseNautyGraph, n::Integer; vertex_labels=0)
     vertex_labels isa Number || n != length(vertex_labels) && throw(ArgumentError("Incompatible length: trying to add `n=$n` vertices, but`vertex_labels` has length $(length(vertex_labels))."))

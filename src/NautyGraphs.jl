@@ -6,21 +6,25 @@ import nauty_jll
 import SHA
 
 const Cbool = Cint
-abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
 
+include("abstractnautygraph.jl")
 include("utils.jl")
 include("graphset.jl")
 include("densenautygraph.jl")
+include("sparsenautygraph.jl")
 include("nauty.jl")
 
 const NautyGraph = DenseNautyGraph{false}
 const NautyDiGraph = DenseNautyGraph{true}
+const SpNautyGraph = SparseNautyGraph{false}
+const SpNautyDiGraph = SparseNautyGraph{true}
 
 function __init__()
     # global default options to nauty carry a pointer reference that needs to be initialized at runtime
-    DEFAULTOPTIONS16.dispatch = cglobal((:dispatch_graph, libnauty(UInt16)), Cvoid)
-    DEFAULTOPTIONS32.dispatch = cglobal((:dispatch_graph, libnauty(UInt32)), Cvoid)
-    DEFAULTOPTIONS64.dispatch = cglobal((:dispatch_graph, libnauty(UInt64)), Cvoid)
+    DEFAULTOPTIONS_DENSE16.dispatch = cglobal((:dispatch_graph, libnauty(UInt16)), Cvoid)
+    DEFAULTOPTIONS_DENSE32.dispatch = cglobal((:dispatch_graph, libnauty(UInt32)), Cvoid)
+    DEFAULTOPTIONS_DENSE64.dispatch = cglobal((:dispatch_graph, libnauty(UInt64)), Cvoid)
+    DEFAULTOPTIONS_SPARSE.dispatch = cglobal((:dispatch_sparse, libnauty(UInt64)), Cvoid)
     return
 end
 
@@ -44,7 +48,10 @@ export
     AbstractNautyGraph,
     NautyGraph,
     NautyDiGraph,
+    SpNautyGraph,
+    SpNautyDiGraph,
     DenseNautyGraph,
+    SparseNautyGraph,
     AutomorphismGroup,
     labels, 
     label, 

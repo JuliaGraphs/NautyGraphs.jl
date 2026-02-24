@@ -20,6 +20,8 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
 
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, graphset.n)
+    else
+        vertex_labels = copy(vertex_labels)
     end
     return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end
@@ -131,11 +133,11 @@ Do not modify the vector of labels returned. Use [`setlabels!`](@ref) or [`setla
 @inline labels(g::AbstractNautyGraph) = g._labels
 
 """
-    label(g::AbstractNautyGraph, i::Integer)
+    label(g::AbstractNautyGraph, vi::Integer)
 
-Return the label of vertex `i` of `g`.
+Return the label of vertex `v` of `g`.
 """
-@inline label(g::AbstractNautyGraph, index::Integer) = g._labels[index]
+@inline label(g::AbstractNautyGraph, v::Integer) = g._labels[v]
 
 """
     setlabels!(g::AbstractNautyGraph, vertex_labels)
@@ -143,19 +145,21 @@ Return the label of vertex `i` of `g`.
 Set the vertex labels of `g` equal to `vertex_labels`.
 """
 function setlabels!(g::AbstractNautyGraph, vertex_labels)
+    length(vertex_labels) == nv(g) || throw(ArgumentError("The length of `vertex_labels` does not match the number of vertices of `g`."))
+    copyto!(g._labels, vertex_labels)
     g.iscanon = false
-    g._labels .= vertex_labels
     return vertex_labels
 end
 
 """
-    setlabel!(g::AbstractNautyGraph, i::Integer, vertex_label)
+    setlabel!(g::AbstractNautyGraph, v::Integer, vertex_label)
 
-Set the label of vertex `i` of `g` equal to `vertex_label`.
+Set the label of vertex `v` of `g` equal to `vertex_label`.
 """
-function setlabel!(g::AbstractNautyGraph, index::Integer, vertex_label)
+function setlabel!(g::AbstractNautyGraph, v::Integer, vertex_label)
+    v ∈ vertices(g) || throw(ArgumentError("`v` is not a vertex of `g`."))
+    g._labels[v] = vertex_label
     g.iscanon = false
-    g._labels[index] = vertex_label
     return vertex_label
 end
 

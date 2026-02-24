@@ -3,7 +3,7 @@
 [![Documentation stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliagraphs.org/NautyGraphs.jl/stable/)
 [![Documentation dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliagraphs.org/NautyGraphs.jl/dev/)
 [![Build Status](https://github.com/mxhbl/NautyGraphs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mxhbl/NautyGraphs.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/mxhbl/NautyGraphs.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mxhbl/NautyGraphs.jl)
+[![codecov](https://codecov.io/github/JuliaGraphs/NautyGraphs.jl/graph/badge.svg?token=5MpCm5yPjw)](https://codecov.io/github/JuliaGraphs/NautyGraphs.jl)
 
 NautyGraphs.jl is a Julia interface to the popular graph isomorphism tool [_nauty_](https://pallini.di.uniroma1.it/) by Brendan McKay. It allows for efficient isomorphism checking, canonical labeling, and hashing of vertex-labeled graphs. In addition, NautyGraphs.jl is fully compatible with the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) API. This makes it easy to create or modify graphs through familiar syntax, and allows NautyGraphs to work with a large library of graph algorithms.
 **Warning**: NautyGraphs.jl currently does not work on Windows.

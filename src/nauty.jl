@@ -120,7 +120,9 @@ end
 """
     nauty(g::AbstractNautyGraph, [options::NautyOptions]; [canonize=false])
 
-Compute a graph `g`'s canonical form and automorphism group.
+Compute a graph `g`'s canonical permutation and automorphism group. If `canonize=true`, `g` will additionally be canonized in-place.
+
+See also [`canonize!`](@ref) and [`canonical_permutation`](@ref) for other tools related to canonization. 
 """
 function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
@@ -149,6 +151,8 @@ end
     canonize!(g::AbstractNautyGraph)
 
 Reorder `g`'s vertices into canonical order and return the permutation used.
+
+See also [`nauty`](@ref) and [`canonical_permutation`](@ref) for other tools related to canonization.
 """
 function canonize! end
 
@@ -177,6 +181,8 @@ end
     canonical_permutation(g::AbstractNautyGraph)
 
 Return the permutation `p` needed to canonize `g`, meaning that `g[p]` is canonical.
+
+See also [`nauty`](@ref) and [`canonize!`](@ref) for other tools related to canonization.
 """
 function canonical_permutation end
 

@@ -7,6 +7,7 @@ makedocs(sitename="NautyGraphs.jl";
         "index.md",
         "Creating and modifying graphs" => "graph_creation.md",
         "Isomorphism and canonization" => "isomorphism.md",
-        "Automorphism Groups" => "groups.md"]
+        "Automorphism Groups" => "groups.md",
+        "API Reference" => "api.md"]
         )
 deploydocs(repo="github.com/JuliaGraphs/NautyGraphs.jl.git")

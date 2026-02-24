@@ -83,7 +83,7 @@ function DenseNautyGraph{D,W}(g::AbstractGraph; vertex_labels=nothing) where {D,
     return ng
 end
 DenseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(g; vertex_labels)
-DenseNautyGraph{W}(g::AbstractGraph; vertex_labels=nothing) where {W<:UInt} = DenseNautyGraph{is_directed(g),W}(g; vertex_labels)
+DenseNautyGraph{W}(g::AbstractGraph; vertex_labels=nothing) where {W<:Unsigned} = DenseNautyGraph{is_directed(g),W}(g; vertex_labels)
 DenseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = DenseNautyGraph{is_directed(g),UInt}(g; vertex_labels)
 
 """

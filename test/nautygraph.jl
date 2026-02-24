@@ -435,7 +435,10 @@ end
         @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt32}(g)) == UInt32
         @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt16}(g)) == UInt16
         @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt8}(g)) == UInt8
-
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt32}(g)) == UInt32
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt16}(g)) == UInt16
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt8}(g)) == UInt8
+        
         g = Graph(5)
         for G in (DenseNautyGraph, SparseNautyGraph)
             labs = [1, 2, 3, 4, 5]

@@ -96,15 +96,24 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
     return g
 end
 
-function (::Type{G})(g::AbstractGraph) where {G<:SparseNautyGraph}
-    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g), ne=ne(g)) : G(nv(g); ne=ne(g))
+function SparseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D}
+    nedges = D && !is_directed(g) ? 2ne(g) : ne(g)
+
+    ng = if g isa AbstractNautyGraph
+            SparseNautyGraph{D}(nv(g); vertex_labels=isnothing(vertex_labels) ? labels(g) : vertex_labels, ne=nedges)
+        else
+            SparseNautyGraph{D}(nv(g); vertex_labels, ne=nedges)
+    end
+
     for v in vertices(g)
-        for n in neighbors(g, v)
+        neighs = is_directed(g) && is_directed(ng) ? outneighbors : all_neighbors
+        for n in neighs(g, v)
             _add_directed_edge!(ng, v, n)
         end
     end
     return ng
 end
+SparseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = SparseNautyGraph{is_directed(g)}(g; vertex_labels)
 
 Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon)
 function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}

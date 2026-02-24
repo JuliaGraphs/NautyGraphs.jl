@@ -430,6 +430,60 @@ end
             ng2 = G(g)
             @test ng == ng2
         end
+
+        g = Graph(5)
+        @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt32}(g)) == UInt32
+        @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt16}(g)) == UInt16
+        @test NautyGraphs.wordtype(DenseNautyGraph{false, UInt8}(g)) == UInt8
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt32}(g)) == UInt32
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt16}(g)) == UInt16
+        @test NautyGraphs.wordtype(DenseNautyGraph{UInt8}(g)) == UInt8
+        
+        g = Graph(5)
+        for G in (DenseNautyGraph, SparseNautyGraph)
+            labs = [1, 2, 3, 4, 5]
+            ng = G(g; vertex_labels=labs)
+
+            @test labels(ng) == [1, 2, 3, 4, 5]
+
+            labs[1] = 99
+            @test labels(ng) == [1, 2, 3, 4, 5]
+        end
+
+        g = Graph(5)
+        for G in (DenseNautyGraph, SparseNautyGraph)
+            ng = G(g)
+            @test !is_directed(ng)
+        end
+        g = DiGraph(5)
+        for G in (DenseNautyGraph, SparseNautyGraph)
+            ng = G(g)
+            @test is_directed(ng)
+        end
+
+        g = Graph([Edge(1, 2)])
+        for G in (NautyGraph, SpNautyGraph)
+            ng = G(g)
+            @test has_edge(ng, 1, 2)
+            @test has_edge(ng, 2, 1)
+        end
+        for G in (NautyDiGraph, SpNautyDiGraph)
+            ng = G(g)
+            @test has_edge(ng, 1, 2)
+            @test has_edge(ng, 2, 1)
+        end
+
+        g = DiGraph([Edge(1, 2)])
+        for G in (NautyGraph, SpNautyGraph)
+            ng = G(g)
+            @test has_edge(ng, 1, 2)
+            @test has_edge(ng, 2, 1)
+        end
+        for G in (NautyDiGraph, SpNautyDiGraph)
+            ng = G(g)
+            @test has_edge(ng, 1, 2)
+            @test !has_edge(ng, 2, 1)
+        end
     end
 
     ## Edge iterator 

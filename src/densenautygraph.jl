@@ -68,8 +68,12 @@ function DenseNautyGraph{D,W}(A::AbstractMatrix; vertex_labels=nothing) where {D
 end
 DenseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(A; vertex_labels)
 
-function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
-    ng = g isa AbstractNautyGraph ? G(nv(g); vertex_labels=labels(g)) : G(nv(g))
+function DenseNautyGraph{D,W}(g::AbstractGraph; vertex_labels=nothing) where {D,W}
+    ng = if g isa AbstractNautyGraph
+            DenseNautyGraph{D,W}(nv(g); vertex_labels=isnothing(vertex_labels) ? labels(g) : vertex_labels)
+        else
+            DenseNautyGraph{D,W}(nv(g); vertex_labels)
+    end
     for e in edges(g)
         add_edge!(ng, e)
         if !is_directed(g) && is_directed(ng)
@@ -78,6 +82,9 @@ function (::Type{G})(g::AbstractGraph) where {G<:DenseNautyGraph}
     end
     return ng
 end
+DenseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D} = DenseNautyGraph{D,UInt}(g; vertex_labels)
+DenseNautyGraph{W}(g::AbstractGraph; vertex_labels=nothing) where {W<:Unsigned} = DenseNautyGraph{is_directed(g),W}(g; vertex_labels)
+DenseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = DenseNautyGraph{is_directed(g),UInt}(g; vertex_labels)
 
 """
     DenseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; [vertex_labels]) where {D}

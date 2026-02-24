@@ -6,8 +6,8 @@ import nauty_jll
 import SHA
 
 const Cbool = Cint
-abstract type AbstractNautyGraph{T} <: AbstractGraph{T} end
 
+include("abstractnautygraph.jl")
 include("utils.jl")
 include("graphset.jl")
 include("densenautygraph.jl")

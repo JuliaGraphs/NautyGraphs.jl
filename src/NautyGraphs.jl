@@ -13,6 +13,7 @@ include("graphset.jl")
 include("densenautygraph.jl")
 include("sparsenautygraph.jl")
 include("nauty.jl")
+include("graphs_api_extensions.jl")
 
 const NautyGraph = DenseNautyGraph{false}
 const NautyDiGraph = DenseNautyGraph{true}

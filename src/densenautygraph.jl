@@ -20,6 +20,8 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
 
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, graphset.n)
+    else
+        vertex_labels = copy(vertex_labels)
     end
     return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end

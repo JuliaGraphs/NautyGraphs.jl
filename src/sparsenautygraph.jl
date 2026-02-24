@@ -34,6 +34,8 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     e = NONEIGHBOR * ones(Cint, ne) # encode unused values as NONEIGHBOR (== -1)
     if isnothing(vertex_labels)
         vertex_labels = zeros(Int, n)
+    else
+        vertex_labels = copy(vertex_labels)
     end
     return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false)
 end

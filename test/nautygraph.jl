@@ -324,6 +324,25 @@ end
 
         gind2 = glab[[Edge(1, 2), Edge(1, 4)]]
         @test labels(gind2) == [1, 2, 4]
+
+        # memory aliasing
+        for G in (NautyGraph, SpNautyGraph)
+            labs = [1, 2, 3]
+            g = G(; vertex_labels=labs)
+
+            labs[2] = 99
+            @test labels(g) == [1, 2, 3]
+
+            setlabel!(g, 1, -50)
+            @test labs == [1, 99, 3]
+
+            labs2 = [4, 5, 6]
+            setlabels!(g, labs2)
+            @test labs == [1, 99, 3]
+
+            labs2[1] = -100
+            @test labels(g) == [4, 5, 6]
+        end
     end
 
     @testset "copy" begin
@@ -335,8 +354,19 @@ end
                 copy!(h, g)
                 if h isa DenseNautyGraph
                     @test h.graphset == g.graphset
+                    @test h.graphset !== g.graphset
+
                     @test h.graphset.n == g.graphset.n
                     @test h.graphset.m == g.graphset.m
+                elseif h isa SparseNautyGraph
+                    @test h.v == g.v
+                    @test h.v !== g.v
+                    
+                    @test h.e == g.e
+                    @test h.e !== g.e
+
+                    @test h.d == g.d
+                    @test h.d !== g.d
                 end
 
                 @test ne(h) == ne(g)
@@ -344,6 +374,7 @@ end
                 @test edges(h) == edges(g)
                 @test vertices(h) == vertices(g)
                 @test labels(h) == labels(g)
+                @test h._labels !== g._labels
                 @test iscanon(h) == iscanon(g)
                 @test h == g
             end

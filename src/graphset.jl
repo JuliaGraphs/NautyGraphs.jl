@@ -7,12 +7,13 @@ contains `n*m` "words", i.e. unsigned integers that contain the bits of
 the adjacency matrix, where `m` is the number of words per vertex.
 
 The organization of words is as follows:
-
+```
    ------------ m words per vertex ----->  
    | 0x00000000, 0x00000000, 0x00000000, ...  
  n | 0x00000000, 0x00000000, 0x00000000, ...  
    | 0x00000000, 0x00000000, 0x00000000, ...  
-   v  
+   v
+```
 """
 mutable struct Graphset{W<:Unsigned} <: AbstractMatrix{Bool}
     words::Vector{W}

@@ -26,6 +26,26 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end
 
+"""
+    NautyGraph <: AbstractNautyGraph{Int}
+
+Memory-efficient undirected graph format compatible with nauty, which represents the graph as an adjacency matrix in bit vector form. 
+Alias for `DenseNautyGraph{false}`.
+
+See also [`NautyDiGraph`](@ref), [`SpNautyGraph`](@ref), and [`SpNautyDiGraph`](@ref) for other nauty-compatible graph formats.
+"""
+const NautyGraph = DenseNautyGraph{false}
+
+"""
+    NautyDiGraph <: AbstractNautyGraph{Int}
+
+Memory-efficient directed graph format compatible with nauty, which represents the graph as an adjacency matrix in bit vector form. 
+Alias for `DenseNautyGraph{true}`.
+
+See also [`NautyGraph`](@ref), [`SpNautyGraph`](@ref), and [`SpNautyDiGraph`](@ref) for other nauty-compatible graph formats.
+"""
+const NautyDiGraph = DenseNautyGraph{true}
+
 
 """
     DenseNautyGraph{D}(n::Integer; [vertex_labels]) where {D}

@@ -15,6 +15,29 @@ mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
     iscanon::Bool
 end
 
+"""
+    SpNautyGraph
+
+Sparse undirected graph format compatible with nauty, which represents the graph via an edgelist. 
+Repeated modifications to a `SpNautyGraph` may result in suboptimal memory usage.
+Alias for `SparseNautyGraph{false}`.
+
+See also [`NautyGraph`](@ref), [`NautyDiGraph`](@ref), and [`SpNautyDiGraph`](@ref) for other nauty-compatible graph formats.
+
+"""
+const SpNautyGraph = SparseNautyGraph{false}
+
+"""
+    SpNautyDiGraph
+
+Sparse directed graph format compatible with nauty, which represents the graph via an edgelist. 
+Repeated modifications to a `SpNautyGraph` may result in suboptimal memory usage.
+Alias for `SparseNautyGraph{true}`.
+
+See also [`NautyGraph`](@ref), [`NautyDiGraph`](@ref), and [`SpNautyGraph`](@ref) for other nauty-compatible graph formats.
+"""
+const SpNautyDiGraph = SparseNautyGraph{true}
+
 const NONEIGHBOR = -1
 
 """

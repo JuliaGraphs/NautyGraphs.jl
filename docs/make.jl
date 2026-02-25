@@ -10,4 +10,4 @@ makedocs(sitename="NautyGraphs.jl";
         "Automorphism Groups" => "groups.md",
         "API Reference" => "api.md"]
         )
-deploydocs(repo="github.com/JuliaGraphs/NautyGraphs.jl.git")
+deploydocs(repo="github.com/JuliaGraphs/NautyGraphs.jl.git", push_preview=true)

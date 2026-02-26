@@ -1,4 +1,6 @@
 @testset "Graphs API extensions" begin
+    @test NautyGraphs.nautyalg_methods() isa Vector{Symbol}
+
     g = path_graph(5)
     h = path_graph(5)
     k = star_graph(5)

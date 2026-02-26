@@ -6,14 +6,17 @@ struct NautyAlg{S}
     NautyAlg(; sparse=false) = new{sparse}()
 end
 
-"""Lists all functions for which an NautyAlg method is defined"""
+"""Lists all functions for which a `NautyAlg` method is defined"""
 function nautyalg_methods()
     filter(names(@__MODULE__)) do s
         f = getproperty(@__MODULE__, s)
         f isa Function || return false
         any(methods(f)) do m
-            sig = m.sig isa UnionAll ? m.sig.body : m.sig
-            any(t -> t isa Type && t <: NautyAlg, sig.parameters)
+            sig = m.sig
+            while sig isa UnionAll; sig = sig.body; end
+            any(sig.parameters) do t
+                t isa Type && t <: NautyAlg
+            end
         end
     end
 end

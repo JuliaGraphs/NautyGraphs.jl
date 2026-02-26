@@ -8,8 +8,8 @@ end
 
 """Lists all functions for which a `NautyAlg` method is defined"""
 function nautyalg_methods()
-    filter(names(@__MODULE__)) do s
-        f = getproperty(@__MODULE__, s)
+    filter(names(NautyGraphs)) do s
+        f = getproperty(NautyGraphs, s)
         f isa Function || return false
         any(methods(f)) do m
             sig = m.sig

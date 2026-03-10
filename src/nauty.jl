@@ -4,11 +4,11 @@ libnauty(::Type{UInt64}) = nauty_jll.libnautyTL
 
 mutable struct NautyOptions
     getcanon::Cint # Warning: setting getcanon to false means that nauty will NOT compute the canonical representative, which may lead to unexpected results.
-    digraph::Cbool # This needs to be true if the graph is directed or has loops. Disabling this option for undirected graphs with no loops may increase performance.
-    writeautoms::Cbool
-    writemarkers::Cbool
-    defaultptn::Cbool
-    cartesian::Cbool
+    digraph::Cint # This needs to be true if the graph is directed or has loops. Disabling this option for undirected graphs with no loops may increase performance.
+    writeautoms::Cint
+    writemarkers::Cint
+    defaultptn::Cint
+    cartesian::Cint
     linelength::Cint
 
     outfile::Ptr{Cvoid}
@@ -26,7 +26,7 @@ mutable struct NautyOptions
 
     dispatch::Ptr{Cvoid}
 
-    schreier::Cbool
+    schreier::Cint
     extra_options::Ptr{Cvoid}
 
     function NautyOptions(dispatch_pointer::Ptr{Cvoid}; digraph_or_loops, ignorelabels, groupinfo)

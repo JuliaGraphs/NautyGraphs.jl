@@ -160,6 +160,7 @@ function canonize!(g::AbstractNautyGraph)
     iscanon(g) && return canonical_permutation(g)
     canong, canonperm, _ = _nauty(g)
     _copycanon!(g, canong, canonperm)
+    canong isa SparseGraphRep && _free_sparsegraphrep(canong)
     return canonperm
 end
 
@@ -188,7 +189,8 @@ function canonical_permutation end
 
 function canonical_permutation(g::AbstractNautyGraph)
     iscanon(g) && return collect(Cint(1):Cint(nv(g))) # to be type stable, this needs to be Cints
-    _, canonperm, _ = _nauty(g)
+    canong, canonperm, _ = _nauty(g)
+    canong isa SparseGraphRep && _free_sparsegraphrep(canong)
     return canonperm
 end
 

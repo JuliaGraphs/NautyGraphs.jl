@@ -389,12 +389,6 @@ function Base.:(==)(e1::SimpleEdgeIter{<:DenseNautyGraph}, e2::SimpleEdgeIter{<:
     return true
 end
 Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:DenseNautyGraph}) = e2 == e1
-function Base.hash(edgeiter::SimpleEdgeIter{<:SparseNautyGraph}, h::UInt=zero(UInt))
-    for edge in edgeiter
-        h = hash(edge, h)
-    end
-    return h
-end
 
 Graphs.is_directed(::SparseNautyGraph{D}) where {D} = D
 Graphs.is_directed(::Type{SparseNautyGraph{D}}) where {D} = D

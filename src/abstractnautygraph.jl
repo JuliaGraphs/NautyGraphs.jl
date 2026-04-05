@@ -65,3 +65,10 @@ Graphs.induced_subgraph(g::AbstractNautyGraph, iter::AbstractVector{<:AbstractEd
 
 Graphs.add_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.add_edge!(g, edgetype(g)(i, j))
 Graphs.rem_edge!(g::AbstractNautyGraph, i::Integer, j::Integer) = Graphs.rem_edge!(g, edgetype(g)(i, j))
+
+function Base.hash(edgeiter::SimpleEdgeIter{<:AbstractNautyGraph}, h::UInt)
+    for edge in edgeiter
+        h = hash(edge, h)
+    end
+    return h
+end

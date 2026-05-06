@@ -17,10 +17,10 @@ include("graphs_api_extensions.jl")
 
 function __init__()
     # global default options to nauty carry a pointer reference that needs to be initialized at runtime
-    DEFAULTOPTIONS_DENSE16.dispatch = cglobal((:dispatch_graph, libnauty(UInt16)), Cvoid)
-    DEFAULTOPTIONS_DENSE32.dispatch = cglobal((:dispatch_graph, libnauty(UInt32)), Cvoid)
-    DEFAULTOPTIONS_DENSE64.dispatch = cglobal((:dispatch_graph, libnauty(UInt64)), Cvoid)
-    DEFAULTOPTIONS_SPARSE.dispatch = cglobal((:dispatch_sparse, libnauty(UInt64)), Cvoid)
+    DEFAULTOPTIONS_DENSE16.dispatch = cglobal((:dispatch_graph, nauty_jll.libnautyTS), Cvoid)
+    DEFAULTOPTIONS_DENSE32.dispatch = cglobal((:dispatch_graph, nauty_jll.libnautyTW), Cvoid)
+    DEFAULTOPTIONS_DENSE64.dispatch = cglobal((:dispatch_graph, nauty_jll.libnautyTL), Cvoid)
+    DEFAULTOPTIONS_SPARSE.dispatch = cglobal((:dispatch_sparse, nauty_jll.libnautyTL), Cvoid)
     return
 end
 

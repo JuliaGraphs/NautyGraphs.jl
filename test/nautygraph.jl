@@ -372,6 +372,7 @@ end
                 @test ne(h) == ne(g)
                 @test nv(h) == nv(g)
                 @test edges(h) == edges(g)
+                @test hash(edges(h)) == hash(edges(g))
                 @test vertices(h) == vertices(g)
                 @test labels(h) == labels(g)
                 @test h._labels !== g._labels
@@ -494,8 +495,11 @@ end
              0 0 0 0]
         for (g0, g, sg) in testgraphcollection([A])
             @test edges(g) == edges(g0)
+            # @test hash(edges(g)) == hash(edges(g0))
             @test edges(sg) == edges(g0)
+            # @test hash(edges(sg)) == hash(edges(g0))
             @test edges(g) == edges(sg)
+            @test hash(edges(g)) == hash(edges(sg))
 
             g1 = copy(g0)
             add_edge!(g1, 1, nv(g1))
@@ -536,6 +540,8 @@ end
             add_vertex!(sg)
             add_edge!(g, nv(g), nv(g))
             @test edges(g) != edges(sg)
+            @test hash(edges(g)) != hash(edges(sg))
+
 
             add_edge!(sg, nv(g), nv(g))
             @test edges(g) == edges(sg)

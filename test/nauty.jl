@@ -1,3 +1,5 @@
+using NautyGraphs: NautyOptions, NautyStatistics
+
 @testset verbose=true "nauty" begin
     @testset "unlabeled" begin
         es1_A = [Edge(1, 2), Edge(2, 3), Edge(2, 4)]
@@ -289,6 +291,48 @@
         # Test that canonical_id doesnt error for large graphs
         glarge = NautyGraph(200)
         canonical_id(glarge)
+    end
+
+    @testset "options" begin
+        # `NautyOptions` and `NautyStatistics` are passed to C, so their layouts have to keep
+        # matching nauty's `optionblk` and `statsblk`.
+        if Sys.WORD_SIZE == 64
+            @test sizeof(NautyOptions) == 128
+            @test [fieldoffset(NautyOptions, i) for i in 1:fieldcount(NautyOptions)] ==
+                [0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 56, 64, 72, 80, 88, 92, 96, 100, 104, 112, 120]
+
+            @test sizeof(NautyStatistics) == 88
+            @test [fieldoffset(NautyStatistics, i) for i in 1:fieldcount(NautyStatistics)] ==
+                [0, 8, 12, 16, 20, 24, 32, 40, 48, 56, 64, 72, 80]
+        end
+
+        g = NautyGraph(smallgraph(:petersen))
+
+        # Nauty writes into `statsblk`, so `NautyStatistics` has to stay mutable.
+        @test ismutabletype(NautyStatistics)
+        @test all(f -> getfield(NautyStatistics(), f) == 0, fieldnames(NautyStatistics))
+        stats = NautyStatistics()
+        NautyGraphs._nauty(g, NautyOptions(g), stats)
+        @test stats.errstatus == 0
+        @test stats.grpsize1 == 120
+        @test stats.numgenerators > 0
+
+        # Test correct assignment of dispatch vectors
+        dispatches = [NautyOptions(NautyGraph{UInt16}(4)).dispatch,
+                      NautyOptions(NautyGraph{UInt32}(4)).dispatch,
+                      NautyOptions(NautyGraph{UInt64}(4)).dispatch,
+                      NautyOptions(SpNautyGraph(4)).dispatch]
+        @test all(!=(C_NULL), dispatches)
+        @test allunique(dispatches)
+
+        # Keyword constructor
+        o = NautyOptions(g)
+        @test o.getcanon == 1
+        @test o.digraph == 1
+        @test o.defaultptn == 0
+        @test o.writeautoms == 0  # nauty should not write to stdout on its own
+        @test NautyOptions(g; digraph_or_loops=false).digraph == 0
+        @test NautyOptions(g; ignorelabels=true).defaultptn == 1
     end
 end
 

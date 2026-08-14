@@ -334,5 +334,28 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test NautyOptions(g; digraph_or_loops=false).digraph == 0
         @test NautyOptions(g; ignorelabels=true).defaultptn == 1
     end
+
+    @testset "dump statistics" begin
+        g = NautyGraph(smallgraph(:petersen))
+
+        # Reusing one statistics object per task is only safe because nauty sets every field of
+        # `statsblk` on every run.
+        clean = NautyStatistics()
+        NautyGraphs._nauty(g, NautyOptions(g), clean)
+        garbage = NautyStatistics(-99.0, -99, -99, -99, -99, 99, 99, -99, 99, 99, 99, 99, -99)
+        NautyGraphs._nauty(g, NautyOptions(g), garbage)
+        @test all(f -> getfield(garbage, f) == getfield(clean, f), fieldnames(NautyStatistics))
+
+        # reuse across two different graphs must not leak either
+        reused = NautyGraphs.dump_statistics()
+        k = NautyGraph(complete_graph(7))
+        NautyGraphs._nauty(k, NautyOptions(k), reused)
+        NautyGraphs._nauty(g, NautyOptions(g), reused)
+        @test all(f -> getfield(reused, f) == getfield(clean, f), fieldnames(NautyStatistics))
+
+        @test NautyGraphs.dump_statistics() === NautyGraphs.dump_statistics()
+        ids = fetch.([Threads.@spawn objectid(NautyGraphs.dump_statistics()) for _ in 1:4])
+        @test length(unique(ids)) == 4
+    end
 end
 

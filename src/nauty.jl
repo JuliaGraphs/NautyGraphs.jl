@@ -129,13 +129,29 @@ Build a zeroed set of statistics for nauty to write into.
 """
 NautyStatistics() = NautyStatistics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
+const _DUMP_STATISTICS_KEY = :nautygraphs_dump_statistics
+
+"""
+    dump_statistics()
+
+Return a scratch [`NautyStatistics`](@ref) for nauty to write into, so that a run does not have to
+allocate a fresh one.
+
+Nauty treats `statsblk` as write-only and sets every field on each run, so a reused object gives
+the same results as a fresh one, with no need to zero it in between. The object is task-local, so
+concurrent calls never share it.
+"""
+@inline function dump_statistics()
+    return get!(NautyStatistics, task_local_storage(), _DUMP_STATISTICS_KEY)::NautyStatistics
+end
+
 struct AutomorphismGroup
     n::Float64
     orbits::Vector{Cint}
     # generators::Vector{Vector{Cint}} #TODO: not implemented
 end
 
-function _nauty(g::AbstractNautyGraph, options::NautyOptions=NautyOptions(g), statistics::NautyStatistics=NautyStatistics())
+function _nauty(g::AbstractNautyGraph, options::NautyOptions=NautyOptions(g), statistics::NautyStatistics=dump_statistics())
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
     lab, ptn = vertexlabels2labptn(labels(g))
     orbits = zeros(Cint, nv(g))

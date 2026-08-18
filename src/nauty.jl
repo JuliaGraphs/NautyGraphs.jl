@@ -2,7 +2,21 @@ libnauty(::Type{UInt16}) = nauty_jll.libnautyTS
 libnauty(::Type{UInt32}) = nauty_jll.libnautyTW
 libnauty(::Type{UInt64}) = nauty_jll.libnautyTL
 
-mutable struct NautyOptions
+"""
+    NautyOptions
+
+Records all options that affect nauty's execution. Mirrors nauty's `optionblk`, see the nauty manual for details.
+
+!!! warning "Options can change the canonical form"
+
+    Nauty documents `digraph`, `defaultptn`, `tc_level`, `userrefproc`, `invarproc`,
+    `mininvarlevel`, `maxinvarlevel` and `invararg`  as affecting the canonical
+    labeling. Canonical forms (and hence [`canonical_id`](@ref)) are only comparable between
+    graphs processed with the same values for these fields. In particular `digraph=true` on an
+    undirected graph is legal but both slower and, in general, a *different* canonical labeling
+    than `digraph=false`.
+"""
+struct NautyOptions
     getcanon::Cint # Warning: setting getcanon to false means that nauty will NOT compute the canonical representative, which may lead to unexpected results.
     digraph::Cbool # This needs to be true if the graph is directed or has loops. Disabling this option for undirected graphs with no loops may increase performance.
     writeautoms::Cbool
@@ -28,30 +42,70 @@ mutable struct NautyOptions
 
     schreier::Cbool
     extra_options::Ptr{Cvoid}
+end
 
-    function NautyOptions(dispatch_pointer::Ptr{Cvoid}; digraph_or_loops, ignorelabels, groupinfo)
-        return new(1, digraph_or_loops, groupinfo, false, ignorelabels, false, 78,
-                C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL,
-                100, 0, 1, 0,
-                dispatch_pointer,
-                false, C_NULL
+"""
+    NautyOptions(g::AbstractNautyGraph; digraph_or_loops=true, ignorelabels=false)
+
+Build the options for running nauty on graph `g`.
+
+# Keyword arguments
+- `digraph_or_loops`: must be `true` if `g` is directed or has loops. Setting it
+  to `false` for a simple undirected graph is faster, but changes the canonical form.
+- `ignorelabels`: if `true`, all vertices are treated as having the same
+  label, so `g`'s vertex labels are ignored.
+
+!!! warning
+
+    Setting `digraph_or_loops` to `false` if `g` is directed or contains loops will lead to silently wrong results.
+    Even if `digraph_or_loops=false` is valid, this option may change the canonical form, and with it graph hashes
+    and `canonical_id`.
+"""
+@generated function NautyOptions(::DenseNautyGraph{D,W}; digraph_or_loops=true, ignorelabels=false) where {D,W}
+    return :(_options(cglobal((:dispatch_graph, $(libnauty(W))), Cvoid), digraph_or_loops, ignorelabels))
+end
+@generated function NautyOptions(::SparseNautyGraph; digraph_or_loops=true, ignorelabels=false)
+    return :(_options(cglobal((:dispatch_sparse, $(libnauty(UInt64))), Cvoid), digraph_or_loops, ignorelabels))
+end
+
+# Fill in the fields that this package does not expose. `dispatch_pointer` selects the dense or
+# sparse version of nauty, and has to match the graph the options are used with.
+@inline function _options(dispatch_pointer::Ptr{Cvoid}, digraph_or_loops, ignorelabels)
+    return NautyOptions(1, digraph_or_loops, false, false, ignorelabels, false, 78,
+            C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL, C_NULL,
+            100, 0, 1, 0,
+            dispatch_pointer,
+            false, C_NULL
     )
-    end
-end
-@generated function NautyOptions(::Type{W}; digraph_or_loops=true, ignorelabels=false, groupinfo=false) where {W}
-    return :(NautyOptions(cglobal((:dispatch_graph, $(libnauty(W))), Cvoid); digraph_or_loops, ignorelabels, groupinfo))
 end
 
-const DEFAULTOPTIONS_DENSE16 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS_DENSE32 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS_DENSE64 = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
-const DEFAULTOPTIONS_SPARSE = NautyOptions(C_NULL; digraph_or_loops=true, ignorelabels=false, groupinfo=false)
+"""
+    NautyOptions(options::NautyOptions; kwargs...)
 
-default_options(::DenseNautyGraph{D,UInt16}) where {D} = DEFAULTOPTIONS_DENSE16
-default_options(::DenseNautyGraph{D,UInt32}) where {D} = DEFAULTOPTIONS_DENSE32
-default_options(::DenseNautyGraph{D,UInt64}) where {D} = DEFAULTOPTIONS_DENSE64
-default_options(::SparseNautyGraph) = DEFAULTOPTIONS_SPARSE
+Copy `options`, overriding the given fields.
+"""
+@inline function NautyOptions(options::NautyOptions;
+        getcanon=options.getcanon, digraph=options.digraph, writeautoms=options.writeautoms,
+        writemarkers=options.writemarkers, defaultptn=options.defaultptn,
+        cartesian=options.cartesian, linelength=options.linelength, tc_level=options.tc_level,
+        mininvarlevel=options.mininvarlevel, maxinvarlevel=options.maxinvarlevel,
+        invararg=options.invararg, schreier=options.schreier)
+    return NautyOptions(getcanon, digraph, writeautoms, writemarkers, defaultptn, cartesian,
+            linelength,
+            options.outfile, options.userrefproc, options.userautomproc, options.userlevelproc,
+            options.usernodeproc, options.usercanonproc, options.invarproc,
+            tc_level, mininvarlevel, maxinvarlevel, invararg,
+            options.dispatch,
+            schreier, options.extra_options
+    )
+end
 
+"""
+    NautyStatistics
+
+Records the statistics nauty reports about a run. Mirrors nauty's `statsblk`, see the nauty
+manual for details.
+"""
 mutable struct NautyStatistics
     grpsize1::Cdouble
     grpsize2::Cint
@@ -66,10 +120,29 @@ mutable struct NautyStatistics
     invapplics::Culong
     invsuccesses::Culong
     invarsuclevel::Cint
+end
 
-    NautyStatistics() = new(
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    )
+"""
+    NautyStatistics()
+
+Build a zeroed set of statistics for nauty to write into.
+"""
+NautyStatistics() = NautyStatistics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+const _DUMP_STATISTICS_KEY = :nautygraphs_dump_statistics
+
+"""
+    dump_statistics()
+
+Return a scratch [`NautyStatistics`](@ref) for nauty to write into, so that a run does not have to
+allocate a fresh one.
+
+Nauty treats `statsblk` as write-only and sets every field on each run, so a reused object gives
+the same results as a fresh one, with no need to zero it in between. The object is task-local, so
+concurrent calls never share it.
+"""
+@inline function dump_statistics()
+    return get!(NautyStatistics, task_local_storage(), _DUMP_STATISTICS_KEY)::NautyStatistics
 end
 
 struct AutomorphismGroup
@@ -78,7 +151,7 @@ struct AutomorphismGroup
     # generators::Vector{Vector{Cint}} #TODO: not implemented
 end
 
-function _nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g), statistics::NautyStatistics=NautyStatistics())
+function _nauty(g::AbstractNautyGraph, options::NautyOptions=NautyOptions(g), statistics::NautyStatistics=dump_statistics())
     # TODO: allow the user to pass pre-allocated arrays for lab, ptn, orbits, canong in a safe way.
     lab, ptn = vertexlabels2labptn(labels(g))
     orbits = zeros(Cint, nv(g))
@@ -124,7 +197,7 @@ Compute a graph `g`'s canonical permutation and automorphism group. If `canonize
 
 See also [`canonize!`](@ref) and [`canonical_permutation`](@ref) for other tools related to canonization. 
 """
-function nauty(g::AbstractNautyGraph, options::NautyOptions=default_options(g); canonize=false)
+function nauty(g::AbstractNautyGraph, options::NautyOptions=NautyOptions(g); canonize=false)
     if is_directed(g) && !isone(options.digraph)
         throw(ArgumentError("Nauty options need to match the directedness of the input graph. Make sure to instantiate options with `digraph=true` if the input graph is directed."))
     end

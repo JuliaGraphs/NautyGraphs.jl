@@ -54,6 +54,19 @@ end
 
 Base.sum(g::Graphset{W}; kwargs...) where {W} = g.n > 0 ? sum(count_ones, active_words(g); kwargs...) : zero(W)
 
+# Return the active words as a contiguous vector, row by row.
+# `gset.words` itself is returned when there is no excess padding, so the result aliases `gset`
+# unless padding had to be dropped, and must not be mutated.
+@inline function _maybe_copy_active_words(gset::Graphset{W}) where {W}
+    m = cld(gset.n, wordsize(W))
+    m == gset.m && return gset.words
+    words = Vector{W}(undef, gset.n * m)
+    for i in Base.OneTo(gset.n)
+        copyto!(words, (i - 1) * m + 1, gset.words, (i - 1) * gset.m + 1, m)
+    end
+    return words
+end
+
 @inline function active_words(gset::Graphset{W}) where {W}
     # Return the words actually used for representing the matrix, without any unnecessary padding
     m_eff = cld(gset.n, wordsize(W))

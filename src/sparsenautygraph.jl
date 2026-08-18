@@ -268,11 +268,12 @@ end
     return @view g.e[(zero2one(g.v[v])):(g.v[v] + g.d[v])]
 end
 @inline function _fadj_0based(g::SparseGraphRep, v::Integer)
+    # return the adjacency of vertex `v` as an array over nauty's edge list
     # the resulting indices are zero-based
-    es = unsafe_wrap(Array, g.e, g.elen)
-    vs = unsafe_wrap(Array, g.v, g.vlen)
-    ds = unsafe_wrap(Array, g.d, g.dlen)
-    return @view es[(zero2one(vs[v])):(vs[v] + ds[v])]
+    # only the neighbour list is wrapped, rather than all three of nauty's arrays
+    offset = unsafe_load(g.v, v)
+    degree = unsafe_load(g.d, v)
+    return unsafe_wrap(Array, g.e + offset * sizeof(Cint), degree)
 end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here

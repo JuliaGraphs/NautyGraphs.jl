@@ -237,6 +237,27 @@ function canonize!(g::AbstractNautyGraph)
     return canonperm
 end
 
+"""
+    canonical(g::AbstractNautyGraph)
+
+Return a canonized copy of `g` together with the canonical permutation, leaving `g` untouched.
+
+See also [`canonize!`](@ref), which canonizes in place and returns only the permutation.
+"""
+function canonical end
+
+function canonical(g::AbstractNautyGraph)
+    h = copy(g)
+    return h, canonize!(h)
+end
+
+function canonical(g::DenseNautyGraph{D,W}) where {D,W}
+    iscanon(g) && return copy(g), collect(Cint(1):Cint(nv(g)))
+    canong, canonperm, _ = _nauty(g)
+    # `canong` is allocated fresh by nauty, so the new graph can take it over instead of copying.
+    return DenseNautyGraph{D,W}(canong, g._labels[canonperm], g.ne, true), canonperm
+end
+
 function _copycanon!(g::DenseNautyGraph, canong::Graphset, canonperm)
     copy!(g.graphset, canong)
     permute!(g._labels, canonperm)

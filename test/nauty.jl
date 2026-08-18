@@ -335,6 +335,49 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test NautyOptions(g; ignorelabels=true).defaultptn == 1
     end
 
+    @testset "canonical" begin
+        for G in (NautyGraph, NautyDiGraph, SpNautyGraph, SpNautyDiGraph)
+            g = G(6; vertex_labels=[3, 1, 4, 1, 5, 9])
+            add_edge!(g, 1, 2); add_edge!(g, 2, 3); add_edge!(g, 5, 6)
+            before = copy(g)
+
+            h, perm = canonical(g)
+
+            # g is left alone, h is the canonized version
+            @test g == before
+            @test !iscanon(g)
+            @test iscanon(h)
+            @test h ≃ g
+            @test canonical_id(h) == canonical_id(g)
+            @test perm == canonical_permutation(g)
+            @test labels(h) == labels(g)[perm]
+            @test ne(h) == ne(g)
+            @test nv(h) == nv(g)
+
+            # matches the in-place route
+            k = copy(g)
+            permk = canonize!(k)
+            @test perm == permk
+            @test h == k
+
+            # an already canonical graph gives back an independent copy, not an alias
+            h2, perm2 = canonical(h)
+            @test h2 == h
+            @test perm2 == 1:nv(h)
+            @test h2 !== h
+            @test labels(h2) !== labels(h)
+            if h isa NautyGraphs.DenseNautyGraph
+                @test h2.graphset.words !== h.graphset.words
+            else
+                @test h2.e !== h.e && h2.v !== h.v && h2.d !== h.d
+            end
+
+            # empty graphs must work too
+            e, ep = canonical(G(0))
+            @test nv(e) == 0 && isempty(ep)
+        end
+    end
+
     @testset "dump statistics" begin
         g = NautyGraph(smallgraph(:petersen))
 

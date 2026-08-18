@@ -46,6 +46,7 @@ export
     setlabel!,
     iscanon,
     nauty,
+    canonical,
     canonize!,
     canonical_permutation,
     canonical_id,

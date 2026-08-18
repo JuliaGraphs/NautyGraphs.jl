@@ -1,4 +1,4 @@
-using NautyGraphs: active_words
+using NautyGraphs: active_words, _maybe_copy_active_words
 
 function test_graphsets(A; mfacts)
     n, _ = size(A)
@@ -67,4 +67,40 @@ end
 
     @test gs5 == gs6
     @test hash(gs5) == hash(gs6)
+
+    # graphsets of differing order must not compare equal, even when one is a prefix of the other
+    @test Graphset{UInt64}(5, 1) != Graphset{UInt64}(10, 1)
+    @test Graphset{UInt64}(64, 1) != Graphset{UInt64}(128, 2)
+
+    @testset "_maybe_copy_active_words" begin
+        for W in (UInt16, UInt32, UInt64), n in [0, 1, 15, 16, 17, 63, 64, 65, 200]
+            A = rand(rng, Bool, n, n)
+            mmin = cld(n, NautyGraphs.wordsize(W))
+            gs = Graphset{W}(A, mmin)
+
+            # without excess padding the words are handed back as they are, without copying
+            @test _maybe_copy_active_words(gs) === gs.words
+
+            # with excess padding the padding words are dropped, leaving the same content
+            padded = Graphset{W}(A, 3 * mmin)
+            @test padded == gs
+            words = _maybe_copy_active_words(padded)
+            @test length(words) == n * mmin
+            @test words == gs.words
+            n > 0 && @test words !== padded.words
+
+            # same words, in the same order, as the lazy iterator
+            @test words == collect(active_words(padded))
+            @test _maybe_copy_active_words(gs) == collect(active_words(gs))
+        end
+
+        # padding left behind by vertex removal is dropped too
+        gs = Graphset{UInt64}(rand(rng, Bool, 80, 80))
+        for _ in 1:70
+            NautyGraphs._rem_vertex!(gs, 1)
+        end
+        @test gs.m > cld(gs.n, NautyGraphs.wordsize(UInt64))
+        @test _maybe_copy_active_words(gs) == collect(active_words(gs))
+        @test _maybe_copy_active_words(gs) == Graphset{UInt64}(collect(gs)).words
+    end
 end

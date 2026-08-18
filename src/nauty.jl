@@ -137,9 +137,8 @@ const _DUMP_STATISTICS_KEY = :nautygraphs_dump_statistics
 Return a scratch [`NautyStatistics`](@ref) for nauty to write into, so that a run does not have to
 allocate a fresh one.
 
-Nauty treats `statsblk` as write-only and sets every field on each run, so a reused object gives
-the same results as a fresh one, with no need to zero it in between. The object is task-local, so
-concurrent calls never share it.
+Nauty sets every field of `statsblk` on each run, so a reused object gives the same results as a fresh one.
+The object is task-local, so concurrent calls never share it.
 """
 @inline function dump_statistics()
     return get!(NautyStatistics, task_local_storage(), _DUMP_STATISTICS_KEY)::NautyStatistics

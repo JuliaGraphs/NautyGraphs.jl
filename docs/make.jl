@@ -1,6 +1,6 @@
-using Documenter, NautyGraphs
+using Documenter, NautyGraphs, Graphs
 
-DocMeta.setdocmeta!(NautyGraphs, :DocTestSetup, :(using NautyGraphs); recursive=true)
+DocMeta.setdocmeta!(NautyGraphs, :DocTestSetup, :(using NautyGraphs, Graphs); recursive=true)
 
 makedocs(sitename="NautyGraphs.jl";
     pages = [

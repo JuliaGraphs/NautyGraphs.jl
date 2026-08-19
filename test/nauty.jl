@@ -283,11 +283,11 @@ using NautyGraphs: NautyOptions, NautyStatistics
     @testset "overflow" begin
         verylarge_g = NautyGraph(50)
         _, autg = nauty(verylarge_g)
-        @test autg.n > typemax(Int64)
+        @test order(autg) > typemax(Int64)
 
         verylarge_g = SpNautyGraph(50)
         _, autg = nauty(verylarge_g)
-        @test autg.n > typemax(Int64)
+        @test order(autg) > typemax(Int64)
 
         # Test that canonical_id doesnt error for large graphs
         glarge = NautyGraph(200)
@@ -313,7 +313,7 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test ismutabletype(NautyStatistics)
         @test all(f -> getfield(NautyStatistics(), f) == 0, fieldnames(NautyStatistics))
         stats = NautyStatistics()
-        NautyGraphs._nauty(g, NautyOptions(g), stats)
+        NautyGraphs._canonical_form(g, NautyOptions(g), stats)
         @test stats.errstatus == 0
         @test stats.grpsize1 == 120
         @test stats.numgenerators > 0
@@ -334,6 +334,33 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test o.writeautoms == 0  # nauty should not write to stdout on its own
         @test NautyOptions(g; digraph_or_loops=false).digraph == 0
         @test NautyOptions(g; ignorelabels=true).defaultptn == 1
+
+        # Copy constructor
+        base = NautyOptions(g)
+        @test NautyOptions(base) === base
+        @test NautyOptions(base; digraph=false).digraph == 0
+        @test NautyOptions(base; digraph=false).dispatch == base.dispatch
+
+        # The callbacks can be switched on and off after the fact
+        withgens = NautyOptions(base; generators=true, exact_order=true)
+        @test withgens.userautomproc == NautyOptions(g; generators=true).userautomproc
+        @test withgens.userlevelproc == NautyOptions(g; exact_order=true).userlevelproc
+        @test NautyOptions(withgens; generators=false).userautomproc == C_NULL
+        @test NautyOptions(withgens; generators=false).userlevelproc == withgens.userlevelproc
+        @test NautyOptions(withgens; exact_order=false).userlevelproc == C_NULL
+
+        # Leaving them out preserves whatever is installed, including a hand-set callback
+        @test NautyOptions(withgens; digraph=false).userautomproc == withgens.userautomproc
+        @test NautyOptions(withgens; digraph=false).userlevelproc == withgens.userlevelproc
+        handset = NautyOptions(base.getcanon, base.digraph, base.writeautoms, base.writemarkers,
+                base.defaultptn, base.cartesian, base.linelength, base.outfile, base.userrefproc,
+                Ptr{Cvoid}(UInt(0xdeadbeef)), Ptr{Cvoid}(UInt(0xfeedface)), base.usernodeproc,
+                base.usercanonproc, base.invarproc, base.tc_level, base.mininvarlevel,
+                base.maxinvarlevel, base.invararg, base.dispatch, base.schreier,
+                base.extra_options)
+        @test NautyOptions(handset; digraph=false).userautomproc == Ptr{Cvoid}(UInt(0xdeadbeef))
+        @test NautyOptions(handset; digraph=false).userlevelproc == Ptr{Cvoid}(UInt(0xfeedface))
+        @test NautyOptions(handset; generators=false).userautomproc == C_NULL
     end
 
     @testset "canonical" begin
@@ -413,22 +440,262 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test a == b && canonical_id(a) == canonical_id(b)
     end
 
+    @testset "automorphisms" begin
+        # `p` is an automorphism if it is a permutation that preserves both labels and adjacency
+        function isautomorphism(g, p)
+            length(p) == nv(g) && isperm(p) || return false
+            all(label(g, p[i]) == label(g, i) for i in vertices(g)) || return false
+            return all(has_edge(g, p[src(e)], p[dst(e)]) for e in edges(g))
+        end
+
+        # every element of the group the generators generate, by breadth-first closure
+        function closure(gens, n)
+            identity = collect(Cint(1):Cint(n))
+            elements = Set([identity])
+            queue = [identity]
+            while !isempty(queue)
+                q = pop!(queue)
+                for gen in gens
+                    r = gen[q]
+                    r in elements && continue
+                    push!(elements, r)
+                    push!(queue, r)
+                end
+            end
+            return elements
+        end
+
+        # nothing is collected unless it is asked for
+        g = NautyGraph(smallgraph(:petersen))
+        _, autg = nauty(g)
+        @test isnothing(generators(autg))
+        @test order(autg) isa Float64
+        @test order(autg) == 120
+        @test NautyOptions(g).userautomproc == C_NULL
+        @test NautyOptions(g).userlevelproc == C_NULL
+        @test NautyOptions(g; generators=true).userautomproc != C_NULL
+        @test NautyOptions(g; exact_order=true).userlevelproc != C_NULL
+
+        # the flags are independent
+        @test isnothing(generators(nauty(g; exact_order=true)[2]))
+        @test order(nauty(g; exact_order=true)[2]) isa BigInt
+        @test order(nauty(g; generators=true)[2]) isa Float64
+
+        # generators are automorphisms, and there are as many as nauty reports
+        for G in (NautyGraph, NautyDiGraph, SpNautyGraph, SpNautyDiGraph),
+            base in (smallgraph(:petersen), complete_graph(5), path_graph(6), cycle_graph(7),
+                     erdos_renyi(9, 0.4; seed=3))
+
+            h = G(base)
+            _, autg = nauty(h; generators=true, exact_order=true)
+
+            statistics = NautyStatistics()
+            NautyGraphs._canonical_form(h, NautyOptions(h), statistics)
+            @test length(generators(autg)) == statistics.numgenerators
+
+            @test all(p -> isautomorphism(h, p), generators(autg))
+            @test length(closure(generators(autg), nv(h))) == order(autg)
+        end
+
+        # known group orders, exactly
+        for (base, truth) in ((smallgraph(:petersen), big(120)), (complete_graph(6), big(720)),
+                              (cycle_graph(8), big(16)), (path_graph(5), big(2)),
+                              (complete_graph(1), big(1)))
+            _, autg = nauty(NautyGraph(base); exact_order=true)
+            @test order(autg) == truth
+        end
+
+        # the exact order stays exact where the `Float64` cannot
+        _, autg = nauty(NautyGraph(50); exact_order=true)
+        @test order(autg) == factorial(big(50))
+        _, autg = nauty(NautyGraph(200); exact_order=true)
+        @test order(autg) == factorial(big(200))
+        @test order(nauty(NautyGraph(200))[2]) == Inf
+
+        # labels restrict the group
+        labeled = NautyGraph(4; vertex_labels=[1, 1, 2, 2])
+        _, autg = nauty(labeled; generators=true, exact_order=true)
+        @test order(autg) == 4
+        @test all(p -> isautomorphism(labeled, p), generators(autg))
+
+        # empty and single-vertex graphs
+        for G in (NautyGraph, SpNautyGraph)
+            _, autg = nauty(G(0); generators=true, exact_order=true)
+            @test isempty(generators(autg))
+            @test order(autg) == 1
+
+            _, autg = nauty(G(1); generators=true, exact_order=true)
+            @test isempty(generators(autg))
+            @test order(autg) == 1
+        end
+
+        # a later run must not disturb the generators handed out by an earlier one
+        _, first = nauty(NautyGraph(smallgraph(:petersen)); generators=true)
+        kept = deepcopy(generators(first))
+        _, second = nauty(NautyGraph(complete_graph(6)); generators=true)
+        @test generators(first) == kept
+        @test generators(first) !== generators(second)
+
+        # canonizing renumbers the group along with the graph
+        k = NautyGraph(smallgraph(:petersen))
+        _, plain = nauty(k; generators=true, exact_order=true)
+        _, autg = nauty(k; canonize=true, generators=true, exact_order=true)
+        @test iscanon(k)
+        @test order(autg) == order(plain)
+        @test all(p -> isautomorphism(k, p), generators(autg))
+        @test length(closure(generators(autg), nv(k))) == order(autg)
+        # the orbit structure is the same partition, just renumbered
+        @test sort(length.(orbit_partition(autg))) == sort(length.(orbit_partition(plain)))
+        @test orbits(autg) == [minimum(o) for v in vertices(k)
+                               for o in orbit_partition(autg) if v in o]
+
+        # the same holds for a graph whose orbits are not all singletons or the whole vertex set
+        m = NautyGraph(path_graph(5))
+        _, mplain = nauty(m; generators=true)
+        _, mcanon = nauty(m; canonize=true, generators=true)
+        @test all(p -> isautomorphism(m, p), generators(mcanon))
+        @test sort(length.(orbit_partition(mcanon))) == sort(length.(orbit_partition(mplain)))
+
+        # orbits are one-based and label each vertex with the smallest vertex it maps to
+        _, autg = nauty(NautyGraph(path_graph(5)))
+        @test orbits(autg) == Cint[1, 2, 3, 2, 1]
+        @test orbit_partition(autg) == [[1, 5], [2, 4], [3]]
+        @test all(v -> orbits(autg)[v] in vertices(NautyGraph(path_graph(5))), 1:5)
+
+        # a graph with no symmetry has one orbit per vertex
+        rigid = NautyGraph(erdos_renyi(12, 0.5; seed=11))
+        _, autg = nauty(rigid; generators=true)
+        @test order(autg) == 1
+        @test orbits(autg) == Cint.(1:12)
+        @test orbit_partition(autg) == [[v] for v in 1:12]
+
+        # the trivial group is generated by the empty set, not by the identity: the identity is a
+        # member of every automorphism group and is never listed as a generator
+        @test isempty(generators(autg))
+        @test closure(generators(autg), nv(rigid)) == Set([collect(Cint(1):Cint(nv(rigid)))])
+        @test length(closure(generators(autg), nv(rigid))) == order(autg)
+
+        # printing
+        limited(x) = sprint((io, y) -> show(IOContext(io, :limit => true), y), x)
+        plain(x) = sprint((io, y) -> show(IOContext(io, :limit => true), MIME"text/plain"(), y), x)
+
+        petersen = automorphism_group(NautyGraph(smallgraph(:petersen)))
+        @test limited(petersen) == "AutomorphismGroup(order=120, vertices=10, orbits=1, generators=4)"
+        @test plain(petersen) == """
+            AutomorphismGroup
+              order       120
+              vertices    10
+              orbits      1
+              generators  4"""
+
+        # a group whose generators were never asked for says so instead of showing zero
+        nogens = nauty(NautyGraph(path_graph(5)))[2]
+        @test limited(nogens) == "AutomorphismGroup(order=2.0, vertices=5, orbits=3)"
+        @test occursin("generators  not computed", plain(nogens))
+
+        # an order of hundreds of digits is abbreviated only when the output is limited
+        huge = automorphism_group(NautyGraph(200))
+        @test occursin("(375 digits)", limited(huge))
+        @test occursin("vertices=200, orbits=1, generators=199", limited(huge))
+        @test occursin(string(factorial(big(200))), sprint(show, huge))
+
+        # keywords other than `canonize` reach `NautyOptions`
+        labeled2 = NautyGraph(4; vertex_labels=[1, 1, 2, 2])
+        @test order(nauty(labeled2)[2]) == 4
+        @test order(nauty(labeled2; ignorelabels=true)[2]) == 24
+        @test order(nauty(labeled2; ignorelabels=true, exact_order=true)[2]) == big(24)
+        @test nauty(labeled2; digraph_or_loops=false) isa Tuple
+        @test_throws MethodError nauty(labeled2; nosuchoption=true)
+
+        # `automorphism_group` gives everything and leaves the graph alone
+        for G in (NautyGraph, NautyDiGraph, SpNautyGraph, SpNautyDiGraph)
+            base = G(smallgraph(:petersen))
+            snapshot = copy(base)
+            autg = automorphism_group(base)
+
+            @test base == snapshot
+            @test !iscanon(base)
+            @test order(autg) isa BigInt
+            @test order(autg) == 120
+            @test !isnothing(generators(autg))
+            @test all(p -> isautomorphism(base, p), generators(autg))
+            @test length(closure(generators(autg), nv(base))) == order(autg)
+            @test orbit_partition(autg) == [collect(1:10)]
+
+            # it agrees with the `nauty` call it stands for
+            _, viaanauty = nauty(base; generators=true, exact_order=true)
+            @test order(autg) == order(viaanauty)
+            @test orbits(autg) == orbits(viaanauty)
+        end
+
+        # labelled and asymmetric graphs go through the same path
+        labeled3 = NautyGraph(6; vertex_labels=[1, 1, 1, 2, 2, 2])
+        add_edge!(labeled3, 1, 4); add_edge!(labeled3, 2, 5); add_edge!(labeled3, 3, 6)
+        autg = automorphism_group(labeled3)
+        @test order(autg) == 6
+        @test all(p -> isautomorphism(labeled3, p), generators(autg))
+        @test length(closure(generators(autg), nv(labeled3))) == order(autg)
+
+        autg = automorphism_group(NautyGraph(erdos_renyi(12, 0.5; seed=11)))
+        @test order(autg) == 1
+        @test isempty(generators(autg))
+
+        # passing options explicitly requests whatever they were built with
+        _, autg = nauty(g, NautyOptions(g; generators=true))
+        @test length(generators(autg)) == 4
+        _, autg = nauty(g, NautyOptions(g; exact_order=true))
+        @test order(autg) == big(120)
+
+        # the buffer is task-local
+        buffers = fetch.([Threads.@spawn objectid(NautyGraphs.automorphism_buffer()) for _ in 1:4])
+        @test length(unique(buffers)) == 4
+
+        results = fetch.([Threads.@spawn begin
+            h = NautyGraph(smallgraph(:petersen))
+            _, a = nauty(h; generators=true, exact_order=true)
+            (order(a), length(generators(a)), all(p -> isautomorphism(h, p), generators(a)))
+        end for _ in 1:8])
+        @test all(==((big(120), 4, true)), results)
+
+        # a callback failure surfaces as an error rather than being swallowed
+        NautyGraphs.automorphism_buffer().errorcode = NautyGraphs._OUT_OF_MEMORY
+        @test_throws OutOfMemoryError NautyGraphs._check_automorphism_buffer()
+        NautyGraphs._reset_automorphism_buffer!()
+        @test NautyGraphs._check_automorphism_buffer() === nothing
+
+        # a callback must record a failure rather than throw, because throwing would unwind through
+        # nauty's C frames. A negative length fails the allocation the way running out of memory
+        # would, without needing the pointer arguments to be valid.
+        @test NautyGraphs._record_generator(Cint(0), Ptr{Cint}(C_NULL), Ptr{Cint}(C_NULL),
+                Cint(0), Cint(0), Cint(-1)) === nothing
+        @test NautyGraphs.automorphism_buffer().errorcode == NautyGraphs._OUT_OF_MEMORY
+        @test isempty(NautyGraphs.automorphism_buffer().generators)
+        @test_throws OutOfMemoryError NautyGraphs._check_automorphism_buffer()
+        NautyGraphs._reset_automorphism_buffer!()
+
+        # options that contradict the graph, or that switch the canonical form off, are rejected
+        directed = NautyDiGraph([Edge(1, 2), Edge(2, 3)])
+        @test_throws ArgumentError nauty(directed; digraph_or_loops=false)
+        @test_throws ArgumentError nauty(directed, NautyOptions(directed; digraph_or_loops=false))
+        @test_throws ArgumentError nauty(g, NautyOptions(NautyOptions(g); getcanon=0))
+    end
+
     @testset "dump statistics" begin
         g = NautyGraph(smallgraph(:petersen))
 
         # Reusing one statistics object per task is only safe because nauty sets every field of
         # `statsblk` on every run.
         clean = NautyStatistics()
-        NautyGraphs._nauty(g, NautyOptions(g), clean)
+        NautyGraphs._canonical_form(g, NautyOptions(g), clean)
         garbage = NautyStatistics(-99.0, -99, -99, -99, -99, 99, 99, -99, 99, 99, 99, 99, -99)
-        NautyGraphs._nauty(g, NautyOptions(g), garbage)
+        NautyGraphs._canonical_form(g, NautyOptions(g), garbage)
         @test all(f -> getfield(garbage, f) == getfield(clean, f), fieldnames(NautyStatistics))
 
         # reuse across two different graphs must not leak either
         reused = NautyGraphs.dump_statistics()
         k = NautyGraph(complete_graph(7))
-        NautyGraphs._nauty(k, NautyOptions(k), reused)
-        NautyGraphs._nauty(g, NautyOptions(g), reused)
+        NautyGraphs._canonical_form(k, NautyOptions(k), reused)
+        NautyGraphs._canonical_form(g, NautyOptions(g), reused)
         @test all(f -> getfield(reused, f) == getfield(clean, f), fieldnames(NautyStatistics))
 
         @test NautyGraphs.dump_statistics() === NautyGraphs.dump_statistics()

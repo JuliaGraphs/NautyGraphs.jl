@@ -303,9 +303,37 @@ function orbit_partition(autg::AutomorphismGroup)
     return partition
 end
 
+# every orbit is labeled by its smallest vertex, so exactly one vertex per orbit labels itself
+_countorbits(orbits) = count(v -> orbits[v] == v, eachindex(orbits))
+
+# An exact order can run to hundreds of digits; truncate
+function _printorder(io::IO, order)
+    text = string(order)
+    if get(io, :limit, false) && length(text) > 24
+        print(io, first(text, 8), "…", last(text, 4), " (", length(text), " digits)")
+    else
+        print(io, text)
+    end
+    return
+end
+
 function Base.show(io::IO, autg::AutomorphismGroup)
-    print(io, "AutomorphismGroup of order ", autg.order, " on ", length(autg.orbits), " vertices")
-    isnothing(autg.generators) || print(io, ", ", length(autg.generators), " generators")
+    print(io, "AutomorphismGroup(order=")
+    _printorder(io, autg.order)
+    print(io, ", vertices=", length(autg.orbits), ", orbits=", _countorbits(autg.orbits))
+    isnothing(autg.generators) || print(io, ", generators=", length(autg.generators))
+    print(io, ")")
+    return
+end
+
+function Base.show(io::IO, ::MIME"text/plain", autg::AutomorphismGroup)
+    println(io, "AutomorphismGroup")
+    print(io, "  order       ")
+    _printorder(io, autg.order)
+    println(io)
+    println(io, "  vertices    ", length(autg.orbits))
+    println(io, "  orbits      ", _countorbits(autg.orbits))
+    print(io, "  generators  ", isnothing(autg.generators) ? "not computed" : length(autg.generators))
     return
 end
 

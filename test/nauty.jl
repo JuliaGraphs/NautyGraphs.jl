@@ -575,6 +575,30 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test closure(generators(autg), nv(rigid)) == Set([collect(Cint(1):Cint(nv(rigid)))])
         @test length(closure(generators(autg), nv(rigid))) == order(autg)
 
+        # printing
+        limited(x) = sprint((io, y) -> show(IOContext(io, :limit => true), y), x)
+        plain(x) = sprint((io, y) -> show(IOContext(io, :limit => true), MIME"text/plain"(), y), x)
+
+        petersen = automorphism_group(NautyGraph(smallgraph(:petersen)))
+        @test limited(petersen) == "AutomorphismGroup(order=120, vertices=10, orbits=1, generators=4)"
+        @test plain(petersen) == """
+            AutomorphismGroup
+              order       120
+              vertices    10
+              orbits      1
+              generators  4"""
+
+        # a group whose generators were never asked for says so instead of showing zero
+        nogens = nauty(NautyGraph(path_graph(5)))[2]
+        @test limited(nogens) == "AutomorphismGroup(order=2.0, vertices=5, orbits=3)"
+        @test occursin("generators  not computed", plain(nogens))
+
+        # an order of hundreds of digits is abbreviated only when the output is limited
+        huge = automorphism_group(NautyGraph(200))
+        @test occursin("(375 digits)", limited(huge))
+        @test occursin("vertices=200, orbits=1, generators=199", limited(huge))
+        @test occursin(string(factorial(big(200))), sprint(show, huge))
+
         # keywords other than `canonize` reach `NautyOptions`
         labeled2 = NautyGraph(4; vertex_labels=[1, 1, 2, 2])
         @test order(nauty(labeled2)[2]) == 4

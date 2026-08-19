@@ -3,17 +3,23 @@
 Use `automorphism_group(g)` to get a graph's [`AutomorphismGroup`](@ref).
 It reports the group's [`order`](@ref), its vertex [`orbits`](@ref) and a set of [`generators`](@ref), and leaves `g` untouched.
 
-```julia
+```jldoctest groups
+julia> using NautyGraphs, Graphs
+
 julia> g = NautyGraph(smallgraph(:petersen));
 
 julia> autg = automorphism_group(g)
-AutomorphismGroup of order 120 on 10 vertices, 4 generators
+AutomorphismGroup
+  order       120
+  vertices    10
+  orbits      1
+  generators  4
 
 julia> order(autg)
 120
 
 julia> orbit_partition(autg)
-1-element Vector{Vector{Int}}:
+1-element Vector{Vector{Int64}}:
  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
@@ -21,17 +27,20 @@ Generators are permutations in one-based form: generator `p` maps vertex `i` to 
 Together they generate the whole group, so its `order` is generally much larger than the number of generators.
 
 The identity belongs to every automorphism group and is never listed as a generator.
-A graph with no symmetry therefore comes back with an empty generating set, not with a single identity permutation:
+A graph with no symmetry therefore comes back with an empty generating set, not with a single identity permutation.
 
-```julia
-julia> autg = automorphism_group(NautyGraph(erdos_renyi(12, 0.5; seed=11)))
-AutomorphismGroup of order 1 on 12 vertices, 0 generators
+```jldoctest groups
+julia> frucht = automorphism_group(NautyGraph(smallgraph(:frucht)))
+AutomorphismGroup
+  order       1
+  vertices    12
+  orbits      12
+  generators  0
 
-julia> generators(autg)
+julia> generators(frucht)
 Vector{Int32}[]
 ```
 
-An empty generating set means the group is trivial, not that the graph has no automorphisms.
 
 `orbits(autg)` labels every vertex with the smallest vertex it can be mapped to, so two vertices share an orbit exactly if they carry the same label.
 `orbit_partition(autg)` turns that labelling into one vector per orbit, at the cost of an allocation per orbit.
@@ -42,8 +51,11 @@ An empty generating set means the group is trivial, not that the graph has no au
 When that is more than you need, call [`nauty`](@ref) directly and switch the expensive parts off.
 It returns the canonical permutation alongside the group, so nothing has to be recomputed:
 
-```julia
-canonperm, autg = nauty(g; generators=true)
+```jldoctest groups
+julia> canonperm, autg = nauty(g; generators=true);
+
+julia> order(autg)
+120.0
 ```
 
 The orbits and an approximate order come for free with every run.

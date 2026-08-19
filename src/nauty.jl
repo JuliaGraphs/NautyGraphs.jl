@@ -263,6 +263,9 @@ order(autg::AutomorphismGroup) = autg.order
 
 Return the generating permutations of `autg`. Generator `p` maps vertex `i` to `p[i]`.
 
+The identity belongs to every automorphism group and is never listed as a generator, so a graph
+with no symmetry has an empty generating set rather than a single identity permutation.
+
 The generators are only available if the group was computed with `generators=true`.
 """
 generators(autg::AutomorphismGroup) = autg.generators

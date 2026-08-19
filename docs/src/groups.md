@@ -20,6 +20,19 @@ julia> orbit_partition(autg)
 Generators are permutations in one-based form: generator `p` maps vertex `i` to `p[i]`.
 Together they generate the whole group, so its `order` is generally much larger than the number of generators.
 
+The identity belongs to every automorphism group and is never listed as a generator.
+A graph with no symmetry therefore comes back with an empty generating set, not with a single identity permutation:
+
+```julia
+julia> autg = automorphism_group(NautyGraph(erdos_renyi(12, 0.5; seed=11)))
+AutomorphismGroup of order 1 on 12 vertices, 0 generators
+
+julia> generators(autg)
+Vector{Int32}[]
+```
+
+An empty generating set means the group is trivial, not that the graph has no automorphisms.
+
 `orbits(autg)` labels every vertex with the smallest vertex it can be mapped to, so two vertices share an orbit exactly if they carry the same label.
 `orbit_partition(autg)` turns that labelling into one vector per orbit, at the cost of an allocation per orbit.
 

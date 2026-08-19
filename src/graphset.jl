@@ -54,13 +54,28 @@ end
 
 Base.sum(g::Graphset{W}; kwargs...) where {W} = g.n > 0 ? sum(count_ones, active_words(g); kwargs...) : zero(W)
 
+# Return the active words as a contiguous vector, row by row.
+# `gset.words` itself is returned when there is no excess padding, so the result aliases `gset`
+# unless padding had to be dropped, and must not be mutated.
+@inline function _maybe_copy_active_words(gset::Graphset{W}) where {W}
+    m = cld(gset.n, wordsize(W))
+    m == gset.m && return gset.words
+    words = Vector{W}(undef, gset.n * m)
+    for i in Base.OneTo(gset.n)
+        copyto!(words, (i - 1) * m + 1, gset.words, (i - 1) * gset.m + 1, m)
+    end
+    return words
+end
+
 @inline function active_words(gset::Graphset{W}) where {W}
     # Return the words actually used for representing the matrix, without any unnecessary padding
     m_eff = cld(gset.n, wordsize(W))
-    return (gset.words[(i - 1) * gset.m + j] for j in 1:m_eff for i in 1:gset.n)
+    return (gset.words[(i - 1) * gset.m + j] for i in 1:gset.n for j in 1:m_eff)
 end
 # if both graphsets have the same word type, we can directly compare words; otherwise, we fall back to elementwise compare
-Base.:(==)(gs1::Graphset{W}, gs2::Graphset{W}) where {W} = all(w1 == w2 for (w1, w2) in zip(active_words(gs1), active_words(gs2)))
+# `zip` stops at the shorter side, so graphsets of differing order have to be rejected up front
+Base.:(==)(gs1::Graphset{W}, gs2::Graphset{W}) where {W} =
+    gs1.n == gs2.n && all(w1 == w2 for (w1, w2) in zip(active_words(gs1), active_words(gs2)))
 
 function Base.copy!(dest::Graphset, src::Graphset)
     dest.n = src.n

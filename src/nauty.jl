@@ -321,8 +321,8 @@ end
 
 Hash the canonical version of `g`, using the first 128 bits returned by the SHA256 algorithm.
 
-The canonical id has the property that `is_isomorphic(g1, g2) == true` implies `canonical_id(g1) == canonical_id(g2)`. The converse usually holds as well, 
-but in very rare cases, hash collisions may cause non-isomorphic graphs to have the same canonical id. 
+`is_isomorphic(g1, g2)` implies `canonical_id(g1) == canonical_id(g2)`, so differing ids prove that `g1` and `g2` are not isomorphic.
+Equal ids imply isomorphism only up to hash collisions.
 
 !!! note
 
@@ -345,18 +345,46 @@ function canonical_id(g::SparseNautyGraph)
     # needs to work for 0 vertices
     if iscanon(g)
         sortlists!(g)
-        return _SHAhash((_fadj_0based(g, i) for i in 1:nv(g))..., g._labels)
+        return _SHAhash_adjacency(g, g._labels)
     else
         canong, canonperm, _ = _nauty(g)
         sortlists!(canong)
-        h = _SHAhash((_fadj_0based(canong, i) for i in 1:nv(g))..., @view g._labels[canonperm])
+        h = _SHAhash_adjacency(canong, @view g._labels[canonperm])
         _free_sparsegraphrep(canong)
         return h
     end
 end
 
-function _SHAhash(x...)
-    io = IOBuffer()
-    write(io, (htol(x) for x in x)...)
-    return reinterpret(UInt128, SHA.sha256(take!(io)))[1]
+# Hash the bytes of `x` in little-endian order, without copying it into a buffer first.
+# Both conditions are compile-time constants, so the byte swap is only ever compiled on a
+# big-endian host, where it is not performance critical.
+@inline function _shaupdate!(ctx, x::AbstractArray)
+    isempty(x) && return ctx
+    y = ENDIAN_BOM == 0x04030201 || sizeof(eltype(x)) == 1 ? x : map(htol, x)
+    SHA.update!(ctx, vec(reinterpret(UInt8, y)))
+    return ctx
+end
+# Hash the packed words rather than the `n^2` entries of the matrix.
+# `m` can exceed the minimum after vertex removals, so the padding words have to be dropped.
+_shaupdate!(ctx, gs::Graphset) = _shaupdate!(ctx, _maybe_copy_active_words(gs))
+
+_digest(ctx) = reinterpret(UInt128, SHA.digest!(ctx))[1]
+
+function _SHAhash(xs...)
+    ctx = SHA.SHA256_CTX()
+    foreach(x -> _shaupdate!(ctx, x), xs)
+    return _digest(ctx)
+end
+
+# Splatting the adjacency lists into `_SHAhash` would make the argument count depend on `nv`.
+function _SHAhash_adjacency(sg, labels)
+    if length(labels) != sg.nv
+        throw(ArgumentError("got $(length(labels)) labels for a graph on $(sg.nv) vertices"))
+    end
+    ctx = SHA.SHA256_CTX()
+    for i in Base.OneTo(sg.nv)
+        _shaupdate!(ctx, _fadj_0based(sg, i))
+    end
+    _shaupdate!(ctx, labels)
+    return _digest(ctx)
 end

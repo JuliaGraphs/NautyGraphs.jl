@@ -1,3 +1,4 @@
+using SHA
 using NautyGraphs: NautyOptions, NautyStatistics
 
 @testset verbose=true "nauty" begin
@@ -251,7 +252,7 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test true
     end
 
-        @testset "wordtypes" begin
+    @testset "wordtypes" begin
         g = NautyGraph([Edge(1, 2), Edge(2, 3), Edge(2, 4)])
         g16 = NautyGraph{UInt16}(g)
         @test g16 == g
@@ -376,6 +377,40 @@ using NautyGraphs: NautyOptions, NautyStatistics
             e, ep = canonical(G(0))
             @test nv(e) == 0 && isempty(ep)
         end
+    end
+
+    @testset "canonical_id stability" begin
+        # `canonical_id` hashes a specific byte layout. Changing that layout silently
+        # invalidates every id a user has stored, so pin a few down.
+        @test canonical_id(NautyGraph(smallgraph(:petersen))) ==
+            41318317913488837734360009271770145373
+        @test canonical_id(SpNautyGraph(smallgraph(:petersen))) ==
+            173868311105659546303316759195715112189
+        @test canonical_id(NautyDiGraph([Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(4, 5), Edge(5, 1)])) ==
+            295248309473264944339498477569561032550
+
+        # hashing must not depend on how the adjacency lists happen to be laid out, nor on
+        # whether the graph was canonized in place first
+        for G in (NautyGraph, SpNautyGraph)
+            g = G(smallgraph(:petersen))
+            h, _ = canonical(g)
+            k = copy(g); canonize!(k)
+            @test canonical_id(g) == canonical_id(h) == canonical_id(k)
+        end
+
+        # hashing has to work for every array shape `canonical_id` feeds it
+        digest(x) = (ctx = SHA.SHA256_CTX(); NautyGraphs._shaupdate!(ctx, x); SHA.digest!(ctx))
+        for x in (Cint[3, 1, 4, 1, 5], collect(1:50), view(collect(1:20), [7, 2, 19, 4]), Cint[])
+            @test digest(x) == digest(collect(x))
+        end
+
+        # excess padding words must not change the hash of an otherwise equal graph
+        a = NautyGraph(erdos_renyi(12, 0.4; seed=1))
+        b = NautyGraph(90)
+        for _ in 1:(nv(b) - nv(a)); rem_vertex!(b, nv(b)); end
+        for e in edges(a); add_edge!(b, src(e), dst(e)); end
+        @test b.graphset.m > cld(nv(b), 64)
+        @test a == b && canonical_id(a) == canonical_id(b)
     end
 
     @testset "dump statistics" begin

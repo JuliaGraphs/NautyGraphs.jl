@@ -15,6 +15,14 @@ include("sparsenautygraph.jl")
 include("nauty.jl")
 include("graphs_api_extensions.jl")
 
+function __init__()
+    _GENERATOR_CALLBACK[] = @cfunction(_record_generator, Cvoid,
+            (Cint, Ptr{Cint}, Ptr{Cint}, Cint, Cint, Cint))
+    _LEVEL_CALLBACK[] = @cfunction(_record_level, Cvoid,
+            (Ptr{Cint}, Ptr{Cint}, Cint, Ptr{Cint}, Ptr{Cvoid}, Cint, Cint, Cint, Cint, Cint, Cint))
+    return
+end
+
 export
     add_edge!,
     rem_edge!,
@@ -40,7 +48,12 @@ export
     DenseNautyGraph,
     SparseNautyGraph,
     AutomorphismGroup,
-    labels, 
+    automorphism_group,
+    order,
+    orbits,
+    orbit_partition,
+    generators,
+    labels,
     label, 
     setlabels!,
     setlabel!,

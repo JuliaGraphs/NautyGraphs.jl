@@ -40,10 +40,8 @@ function count_isomorph(g1::AbstractGraph, g2::AbstractGraph, ::NautyAlg{true}; 
 end
 
 function _count_isomorph(g1, g2)
-    _, autg = nauty(g1; canonize=true)
-    if g1 ≃ g2
-        return autg.n
-    else
-        return zero(autg.n)
-    end
+    g1 ≃ g2 || return big(0)
+    # the number of isomorphisms is the order of the automorphism group, so it has to be exact
+    _, autg = nauty(g1; exact_order=true)
+    return order(autg)
 end

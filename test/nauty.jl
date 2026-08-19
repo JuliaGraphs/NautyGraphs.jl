@@ -632,6 +632,22 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test_throws OutOfMemoryError NautyGraphs._check_automorphism_buffer()
         NautyGraphs._reset_automorphism_buffer!()
         @test NautyGraphs._check_automorphism_buffer() === nothing
+
+        # a callback must record a failure rather than throw, because throwing would unwind through
+        # nauty's C frames. A negative length fails the allocation the way running out of memory
+        # would, without needing the pointer arguments to be valid.
+        @test NautyGraphs._record_generator(Cint(0), Ptr{Cint}(C_NULL), Ptr{Cint}(C_NULL),
+                Cint(0), Cint(0), Cint(-1)) === nothing
+        @test NautyGraphs.automorphism_buffer().errorcode == NautyGraphs._OUT_OF_MEMORY
+        @test isempty(NautyGraphs.automorphism_buffer().generators)
+        @test_throws OutOfMemoryError NautyGraphs._check_automorphism_buffer()
+        NautyGraphs._reset_automorphism_buffer!()
+
+        # options that contradict the graph, or that switch the canonical form off, are rejected
+        directed = NautyDiGraph([Edge(1, 2), Edge(2, 3)])
+        @test_throws ArgumentError nauty(directed; digraph_or_loops=false)
+        @test_throws ArgumentError nauty(directed, NautyOptions(directed; digraph_or_loops=false))
+        @test_throws ArgumentError nauty(g, NautyOptions(NautyOptions(g); getcanon=0))
     end
 
     @testset "dump statistics" begin

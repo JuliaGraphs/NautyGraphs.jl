@@ -394,6 +394,53 @@ end
         end
     end
 
+    @testset "edgelist layout" begin
+        ### the vertex offsets are sized for nauty, not inferred from a float literal
+        @test SpNautyGraph(5).v isa Vector{Csize_t}
+        @test SpNautyDiGraph(5).v isa Vector{Csize_t}
+
+        ### every constructor lays the edgelist down exactly packed, with no slots to reclaim
+        for D in (false, true)
+            source = D ? DiGraph(cycle_graph(6)) : cycle_graph(6)
+            for g in (SparseNautyGraph{D}(source),
+                      SparseNautyGraph{D}(collect(edges(source))),
+                      SparseNautyGraph{D}(Matrix(adjacency_matrix(source))))
+                @test length(g.e) == g.nde
+                @test ne(g) == ne(source)
+                @test edges(g) == edges(source)
+            end
+        end
+
+        # a weighted matrix inserts on every nonzero, so the edgelist has to be sized the same way
+        g = SpNautyGraph([0 2 0; 2 0 3; 0 3 0])
+        @test ne(g) == 2
+        @test length(g.e) == g.nde == 4
+
+        ### blockdiag must not renumber the free slots of the right-hand graph into real vertices
+        h = SpNautyGraph(3)
+        add_edge!(h, 1, 2)
+        add_edge!(h, 1, 3)
+        rem_edge!(h, 1, 3)
+        bd = blockdiag(h, h)
+        @test bd.nde == count(!=(NautyGraphs.NONEIGHBOR), bd.e)
+        @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5)]
+
+        # a vertex of the right-hand graph still has no list of its own, wherever its offset points
+        @test add_edge!(bd, 6, 6)
+        @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5), Edge(6, 6)]
+        @test bd.nde == count(!=(NautyGraphs.NONEIGHBOR), bd.e)
+
+        ### unsorted or repeated indices are rejected before anything is mutated
+        for D in (false, true)
+            g = SparseNautyGraph{D}(cycle_graph(6))
+            before = (g.nv, g.nde, copy(g.e), copy(g.v), copy(g.d), copy(labels(g)))
+            for inds in ([3, 1], [2, 2], [1, 3, 2])
+                @test_throws ArgumentError rem_vertices!(g, inds)
+                @test (g.nv, g.nde, g.e, g.v, g.d, labels(g)) == before
+            end
+        end
+    end
+
     @testset "conversion" begin
         ng = NautyGraph(; vertex_labels=1:5)
         add_edge!(ng, 1, 2)

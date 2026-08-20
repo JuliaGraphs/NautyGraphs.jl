@@ -52,7 +52,7 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     if !isnothing(vertex_labels) && n != length(vertex_labels)
         throw(ArgumentError("The number of vertices is not compatible with the length of `vertex_labels`."))
     end
-    v = zeros(n)
+    v = zeros(Csize_t, n)
     d = zeros(Cint, n)
     e = NONEIGHBOR * ones(Cint, ne) # encode unused values as NONEIGHBOR (== -1)
     if isnothing(vertex_labels)
@@ -86,7 +86,8 @@ function SparseNautyGraph{D}(A::AbstractMatrix; vertex_labels=nothing) where {D}
     isequal(n, m) || throw(ArgumentError("Adjacency / distance matrices must be square"))
     D || issymmetric(A) || throw(ArgumentError("Adjacency / distance matrices must be symmetric"))
 
-    g = SparseNautyGraph{D}(n; vertex_labels, ne=sum(isone, A))
+    # every nonzero entry becomes one directed edge, so this is exactly the number of slots needed
+    g = SparseNautyGraph{D}(n; vertex_labels, ne=count(!iszero, A))
     for i in axes(A, 1), j in axes(A, 2)
         A[i, j] != 0 && _add_directed_edge!(g, i, j)
     end
@@ -108,10 +109,9 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
         nvg = max(nvg, src(e), dst(e))
     end
 
-    # sort edgelist to optimize neighborlist packing
-    # edge_list = sort(edge_list)
-
-    g = SparseNautyGraph{D}(nvg; vertex_labels, ne=length(edge_list))
+    # an undirected graph stores each edge in both directions; `trim_edgelist!` gives back whatever
+    # this over-estimates, and over-estimating is much cheaper than growing the list edge by edge
+    g = SparseNautyGraph{D}(nvg; vertex_labels, ne=D ? length(edge_list) : 2 * length(edge_list))
     for edge in edge_list
         add_edge!(g, edge)
     end
@@ -120,7 +120,9 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
 end
 
 function SparseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D}
-    nedges = D && !is_directed(g) ? 2ne(g) : ne(g)
+    # only a directed graph copied into a directed one stores each edge once; every other combination
+    # walks `all_neighbors` and needs up to two slots per edge, which `trim_edgelist!` trims back
+    nedges = is_directed(g) && D ? ne(g) : 2ne(g)
 
     ng = if g isa AbstractNautyGraph
             SparseNautyGraph{D}(nv(g); vertex_labels=isnothing(vertex_labels) ? labels(g) : vertex_labels, ne=nedges)
@@ -134,6 +136,7 @@ function SparseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D}
             _add_directed_edge!(ng, v, n)
         end
     end
+    trim_edgelist!(ng)
     return ng
 end
 SparseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = SparseNautyGraph{is_directed(g)}(g; vertex_labels)
@@ -443,20 +446,21 @@ function Graphs.add_edge!(g::SparseNautyGraph, e::Edge)
 end
 function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     idx = Int(zero2one(g.v[i] + g.d[i]))
+    isfree = idx in eachindex(g.e) && g.e[idx] == NONEIGHBOR
 
-    # If this is the first edge of vertex i
-    # find a free spot to start its neighborlist
-    if isone(idx)
-        idx = findfirst(==(NONEIGHBOR), g.e)
+    # A vertex without neighbors has no list to extend, so it needs a free spot to start one. Until
+    # then `g.v[i]` may point anywhere (`blockdiag` leaves it offset), so the degree rather than the
+    # position is what decides.
+    if iszero(g.d[i]) && !isfree
+        freeidx = findfirst(==(NONEIGHBOR), g.e)
         # If there is no free spot, we will append at the end
-        if isnothing(idx)
-            idx = length(g.e) + 1
-        end
+        idx = isnothing(freeidx) ? length(g.e) + 1 : freeidx
         g.v[i] = one2zero(idx)
+        isfree = !isnothing(freeidx)
     end
 
     # If there is a free spot at the end of the list, append j
-    if idx in eachindex(g.e) && g.e[idx] == NONEIGHBOR
+    if isfree
         g.e[idx] = one2zero(j)
     # otherwise insert j and shift the other indices
     else
@@ -527,6 +531,8 @@ Graphs.add_vertices!(g::SparseNautyGraph; vertex_labels=0) = Graphs.add_vertices
 function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
     isempty(inds) && return true
     all(i->has_vertex(g, i), inds) || return false
+    # checked before anything is mutated, so that bad indices cannot leave a half-deleted graph
+    issorted(inds, lt=<=) || throw(ArgumentError("indices must be unique and sorted"))
 
     for i in vertices(g)
         if i in inds
@@ -566,7 +572,12 @@ function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) wher
     nde = g.nde + h.nde
     v = [g.v; h.v .+ length(g.e)]
     d = [g.d; h.d]
-    e = [g.e; h.e .+ g.nv]
+    # `h`'s free slots have to stay free: shifting `NONEIGHBOR` would turn them into real vertices
+    e = Vector{Cint}(undef, length(g.e) + length(h.e))
+    copyto!(e, g.e)
+    for (k, neighbor) in enumerate(h.e)
+        e[length(g.e) + k] = ifelse(neighbor == NONEIGHBOR, neighbor, neighbor + Cint(g.nv))
+    end
     labels = [g._labels; h._labels]
     iscanon = false
 

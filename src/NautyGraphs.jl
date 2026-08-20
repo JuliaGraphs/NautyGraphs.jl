@@ -49,6 +49,7 @@ export
     SparseNautyGraph,
     AutomorphismGroup,
     automorphism_group,
+    NautyBuffer,
     order,
     orbits,
     orbit_partition,

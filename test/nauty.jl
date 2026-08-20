@@ -312,11 +312,11 @@ using NautyGraphs: NautyOptions, NautyStatistics
         # Nauty writes into `statsblk`, so `NautyStatistics` has to stay mutable.
         @test ismutabletype(NautyStatistics)
         @test all(f -> getfield(NautyStatistics(), f) == 0, fieldnames(NautyStatistics))
-        stats = NautyStatistics()
-        NautyGraphs._canonical_form(g, NautyOptions(g), stats)
-        @test stats.errstatus == 0
-        @test stats.grpsize1 == 120
-        @test stats.numgenerators > 0
+        buffer = NautyBuffer(g)
+        NautyGraphs._fillcanon!(buffer, g, NautyOptions(g))
+        @test buffer.statistics.errstatus == 0
+        @test buffer.statistics.grpsize1 == 120
+        @test buffer.statistics.numgenerators > 0
 
         # Test correct assignment of dispatch vectors
         dispatches = [NautyOptions(NautyGraph{UInt16}(4)).dispatch,
@@ -489,9 +489,9 @@ using NautyGraphs: NautyOptions, NautyStatistics
             h = G(base)
             _, autg = nauty(h; generators=true, exact_order=true)
 
-            statistics = NautyStatistics()
-            NautyGraphs._canonical_form(h, NautyOptions(h), statistics)
-            @test length(generators(autg)) == statistics.numgenerators
+            probe = NautyBuffer(h)
+            NautyGraphs._fillcanon!(probe, h, NautyOptions(h))
+            @test length(generators(autg)) == probe.statistics.numgenerators
 
             @test all(p -> isautomorphism(h, p), generators(autg))
             @test length(closure(generators(autg), nv(h))) == order(autg)
@@ -680,27 +680,91 @@ using NautyGraphs: NautyOptions, NautyStatistics
         @test_throws ArgumentError nauty(g, NautyOptions(NautyOptions(g); getcanon=0))
     end
 
-    @testset "dump statistics" begin
+    @testset "buffer" begin
+        # a reused buffer has to give exactly what a fresh one does, even though nauty finds it
+        # full of the previous run's data
+        for G in (NautyGraph, NautyDiGraph, SpNautyGraph, SpNautyDiGraph)
+            shared = NautyBuffer(G(1))
+            for n in (0, 1, 7, 33, 64, 65, 40, 5), p in (0.0, 0.35, 1.0)
+                g = G(erdos_renyi(n, p; seed=n + 1))
+                @test canonical_id(g; buffer=shared) == canonical_id(g)
+                @test canonical_permutation(g; buffer=shared) == canonical_permutation(g)
+
+                inplace, fresh = copy(g), copy(g)
+                @test canonize!(inplace; buffer=shared) == canonize!(fresh)
+                @test inplace == fresh
+            end
+        end
+
+        # labels that give a non-trivial colouring exercise `ptn`, whose last entry used to be left
+        # untouched by the in-place fill and so held stale data in a reused buffer
+        shared = NautyBuffer(NautyGraph(1))
+        for labelling in ([1, 1, 2, 2, 3], [1, 2, 3, 4, 5], [7, 7, 7, 7, 7], [2, 1, 2, 1, 2])
+            g = NautyGraph(path_graph(5))
+            setlabels!(g, labelling)
+            @test canonical_id(g; buffer=shared) == canonical_id(g)
+        end
+
+        # a buffer grows and shrinks with the graph, leaving nothing of the previous run behind
+        big = NautyGraph(erdos_renyi(80, 0.3; seed=4))
+        small = NautyGraph(erdos_renyi(6, 0.5; seed=5))
+        shared = NautyBuffer(big)
+        canonical_id(big; buffer=shared)
+        @test canonical_id(small; buffer=shared) == canonical_id(small)
+        @test canonical_id(big; buffer=shared) == canonical_id(big)
+
+        # `nauty` and `automorphism_group` take a buffer too
+        g = NautyGraph(smallgraph(:petersen))
+        shared = NautyBuffer(g)
+        @test nauty(g; buffer=shared)[1] == nauty(g)[1]
+        p1, a1 = nauty(g; generators=true, exact_order=true, buffer=shared)
+        p2, a2 = nauty(g; generators=true, exact_order=true)
+        @test p1 == p2 && order(a1) == order(a2) && orbits(a1) == orbits(a2)
+        @test generators(a1) == generators(a2)
+        @test order(automorphism_group(g; buffer=shared)) == order(a2)
+
+        # what `nauty` hands back is copied out of the buffer, so a later run must not disturb it
+        keptperm, keptorbits = copy(p1), copy(orbits(a1))
+        canonical_id(NautyGraph(complete_graph(9)); buffer=shared)
+        @test p1 == keptperm
+        @test orbits(a1) == keptorbits
+
+        # comparing two graphs needs two buffers, because both canonical forms have to be alive
+        h = NautyGraph(smallgraph(:petersen))
+        @test is_isomorphic(g, h; buffers=(NautyBuffer(g), NautyBuffer(h)))
+        @test_throws ArgumentError is_isomorphic(g, h; buffers=(shared, shared))
+        k = NautyGraph(complete_graph(10))
+        @test !is_isomorphic(g, k; buffers=(NautyBuffer(g), NautyBuffer(k)))
+
+        # vertices are `Int` wherever they reach the caller
+        @test eltype(canonical_permutation(g)) === Int
+        @test eltype(canonize!(copy(g))) === Int
+        @test eltype(canonical(g)[2]) === Int
+        autg = automorphism_group(g)
+        @test eltype(orbits(autg)) === Int
+        @test all(p -> eltype(p) === Int, generators(autg))
+        @test eltype(orbit_partition(autg)[1]) === Int
+    end
+
+    @testset "statistics" begin
         g = NautyGraph(smallgraph(:petersen))
 
-        # Reusing one statistics object per task is only safe because nauty sets every field of
-        # `statsblk` on every run.
-        clean = NautyStatistics()
-        NautyGraphs._canonical_form(g, NautyOptions(g), clean)
-        garbage = NautyStatistics(-99.0, -99, -99, -99, -99, 99, 99, -99, 99, 99, 99, 99, -99)
-        NautyGraphs._canonical_form(g, NautyOptions(g), garbage)
-        @test all(f -> getfield(garbage, f) == getfield(clean, f), fieldnames(NautyStatistics))
+        # Reusing a buffer's statistics is only safe because nauty sets every field of `statsblk`
+        # on every run.
+        clean = NautyBuffer(g)
+        NautyGraphs._fillcanon!(clean, g)
+        dirty = NautyBuffer(g)
+        dirty.statistics = NautyStatistics(-99.0, -99, -99, -99, -99, 99, 99, -99, 99, 99, 99, 99, -99)
+        NautyGraphs._fillcanon!(dirty, g)
+        @test all(f -> getfield(dirty.statistics, f) == getfield(clean.statistics, f),
+                  fieldnames(NautyStatistics))
 
         # reuse across two different graphs must not leak either
-        reused = NautyGraphs.dump_statistics()
-        k = NautyGraph(complete_graph(7))
-        NautyGraphs._canonical_form(k, NautyOptions(k), reused)
-        NautyGraphs._canonical_form(g, NautyOptions(g), reused)
-        @test all(f -> getfield(reused, f) == getfield(clean, f), fieldnames(NautyStatistics))
-
-        @test NautyGraphs.dump_statistics() === NautyGraphs.dump_statistics()
-        ids = fetch.([Threads.@spawn objectid(NautyGraphs.dump_statistics()) for _ in 1:4])
-        @test length(unique(ids)) == 4
+        reused = NautyBuffer(g)
+        NautyGraphs._fillcanon!(reused, NautyGraph(complete_graph(7)))
+        NautyGraphs._fillcanon!(reused, g)
+        @test all(f -> getfield(reused.statistics, f) == getfield(clean.statistics, f),
+                  fieldnames(NautyStatistics))
     end
 end
 

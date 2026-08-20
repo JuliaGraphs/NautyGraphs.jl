@@ -181,6 +181,8 @@ _add_vertex!(gset::Graphset) = _add_vertices!(gset, 1)
 
 function _rem_vertices!(gset::Graphset{W}, inds) where {W}
     nrv = length(inds)
+    # checked before anything is mutated, so that bad indices cannot leave a half-shifted graphset
+    issorted(inds, lt=<=) || throw(ArgumentError("indices must be unique and sorted"))
 
     deleteat!(gset.words, Iterators.flatten(1+(i-1)*gset.m:i*gset.m for i in inds))
     gset.n -= nrv
@@ -189,10 +191,7 @@ function _rem_vertices!(gset::Graphset{W}, inds) where {W}
     linidx = LinearIndices((m, n))'
 
     δ = 0
-    lastind = 0
     for ind in inds
-        ind < lastind && throw(ArgumentError("indices must be unique and sorted"))
-
         wordidx, bitidx = bitaddress(gset, 1, ind - δ)
         for i in 1:n
             fillword = wordidx == m ? zero(W) : gset.words[linidx[i, wordidx+1]]

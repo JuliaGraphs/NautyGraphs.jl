@@ -536,6 +536,13 @@ end
                 @test_throws ArgumentError rem_vertices!(g, inds)
                 @test (g.nv, g.nde, g.e, g.v, g.d, labels(g)) == before
             end
+
+            dense = DenseNautyGraph{D}(cycle_graph(6))
+            densebefore = (nv(dense), ne(dense), copy(dense.graphset.words), copy(labels(dense)))
+            for inds in ([3, 1], [2, 2], [1, 3, 2])
+                @test_throws ArgumentError rem_vertices!(dense, inds)
+                @test (nv(dense), ne(dense), dense.graphset.words, labels(dense)) == densebefore
+            end
         end
 
         ### the layout stays consistent under repeated modification, and keeps matching a SimpleGraph

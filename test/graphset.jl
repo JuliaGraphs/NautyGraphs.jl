@@ -72,6 +72,15 @@ end
     @test Graphset{UInt64}(5, 1) != Graphset{UInt64}(10, 1)
     @test Graphset{UInt64}(64, 1) != Graphset{UInt64}(128, 2)
 
+    ### unsorted or repeated indices are rejected before anything is mutated
+    gs = Graphset{UInt64}(rand(rng, Bool, 6, 6))
+    reference = copy(gs.words)
+    for inds in ([3, 1], [2, 2], [1, 3, 2])
+        @test_throws ArgumentError NautyGraphs._rem_vertices!(gs, inds)
+        @test gs.n == 6
+        @test gs.words == reference
+    end
+
     @testset "_maybe_copy_active_words" begin
         for W in (UInt16, UInt32, UInt64), n in [0, 1, 15, 16, 17, 63, 64, 65, 200]
             A = rand(rng, Bool, n, n)

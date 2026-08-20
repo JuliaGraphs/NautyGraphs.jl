@@ -20,14 +20,14 @@ false
 We can now canonize both graphs using the `canonize!` function. This will canonize the graphs in-place and return the permutation that was applied (this is useful if external graph metadata needs to be kept in sync).
 ```jldoctest isomorph
 julia> canonize!(g1)
-4-element Vector{Int32}:
+4-element Vector{Int64}:
  1
  3
  4
  2
 
 julia> canonize!(g2)
-4-element Vector{Int32}:
+4-element Vector{Int64}:
  4
  1
  3
@@ -82,4 +82,31 @@ canonized graphs, and falling back to equality checks if a hash collision is fou
 
 If you want to compare graph hashes without checking for collisions, it is strongly recommended to hash graphs using the `canonical_id` function, with returns the first 128 bits of
 the cryptographically secure SHA256 hash algorithm. This should provide sufficient collision resistance for most applications.
-However, note that the output of`canonical_id` depends on the type of the input graph, meaning that `canonical_id(g1::NautyGraph)` will not be equal to `canonical_id(g2::SpNautyGraph)`, even if `g1` and `g2` are isomorphic to each other. If required, you need to manually convert the graphs to the same type. 
+However, note that the output of`canonical_id` depends on the type of the input graph, meaning that `canonical_id(g1::NautyGraph)` will not be equal to `canonical_id(g2::SpNautyGraph)`, even if `g1` and `g2` are isomorphic to each other. If required, you need to manually convert the graphs to the same type.
+
+## Reusing memory across many graphs
+Every call that runs nauty needs some working memory: the arrays nauty permutes, and the canonical graph it writes.
+By default each call allocates that memory and throws it away again, which is wasteful in a loop over many graphs.
+
+Pass a [`NautyBuffer`](@ref) to reuse it instead.
+Its size adapts to whatever graph it is used with, so one buffer serves a whole loop:
+
+```jldoctest isomorph
+julia> graphs = [NautyGraph([Edge(1, 2), Edge(2, 3), Edge(3, k)]) for k in 4:9];
+
+julia> buffer = NautyBuffer(first(graphs));
+
+julia> ids = [canonical_id(g; buffer) for g in graphs];
+
+julia> ids == [canonical_id(g) for g in graphs]
+true
+```
+
+With a buffer the amount of memory a call allocates no longer grows with the graph, and `canonize!`, `canonical`,
+`canonical_permutation`, `nauty` and `automorphism_group` all accept one as well.
+
+!!! warning "A buffer's contents only live until the next run"
+
+    A run overwrites the whole buffer, so anything read out of it must be copied before the buffer is used again.
+    Results that a function returns are already copies and are safe to keep.
+    Comparing two graphs is the one case that needs two buffers, because both canonical forms have to be alive at once, so `is_isomorphic` takes a `buffers` pair rather than a single `buffer`.

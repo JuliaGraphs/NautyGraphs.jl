@@ -37,14 +37,14 @@ true
 Use `canonize!(g)` to reorder `g` into canonical order. `canonize!(g)` also returns the permutation needed to canonize `g`:
 ```jldoctest intro
 julia> canonize!(g)
-4-element Vector{Int32}:
+4-element Vector{Int64}:
  1
  3
  4
  2
 
 julia> canonize!(h)
-4-element Vector{Int32}:
+4-element Vector{Int64}:
  2
  1
  3

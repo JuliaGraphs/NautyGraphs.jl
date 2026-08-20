@@ -1,7 +1,7 @@
 # Graph automorphism groups
 
 Use `automorphism_group(g)` to get a graph's [`AutomorphismGroup`](@ref).
-It reports the group's [`order`](@ref), its vertex [`orbits`](@ref) and a set of [`generators`](@ref), and leaves `g` untouched.
+It reports the group's [`order`](@ref), its vertex [`orbits`](@ref) and a set of [`generators`](@ref).
 
 ```jldoctest groups
 julia> using NautyGraphs, Graphs
@@ -38,7 +38,7 @@ AutomorphismGroup
   generators  0
 
 julia> generators(frucht)
-Vector{Int32}[]
+Vector{Int64}[]
 ```
 
 

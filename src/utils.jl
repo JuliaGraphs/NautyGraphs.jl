@@ -12,5 +12,7 @@ function vertexlabels2labptn!(lab::Vector{<:Integer}, ptn::Vector{<:Integer}, la
     for i in 1:length(lab)-1
         ptn[i] = ifelse(labels[lab[i+1]+1] == labels[lab[i]+1], 1, 0)
     end
+    # nauty ends the last cell on a zero, so `ptn` has to be written in full even when it is reused
+    isempty(ptn) || (ptn[end] = 0)
     return lab, ptn
 end

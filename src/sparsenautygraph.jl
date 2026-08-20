@@ -567,12 +567,26 @@ Graphs.add_vertex!(g::SparseNautyGraph; vertex_label::Integer=0) = Graphs.add_ve
 Graphs.add_vertices!(g::SparseNautyGraph; vertex_labels=0) = Graphs.add_vertices!(g, length(vertex_labels); vertex_labels)
 
 """
-    rem_vertices!(g::SparseNautyGraph, inds)
+    rem_vertices!(g::SparseNautyGraph, inds; compact=false, buffer=Vector{Cint}(undef, nv(g)))
 
 Remove the vertices `inds` from `g`, which must be given in increasing order.
 Return `false` without modifying `g` if any of `inds` is not a vertex of `g`.
+
+Whatever the removal frees is left in the edgelist as free space, which later insertions reuse.
+Pass `compact=true` to gather the surviving neighborlists into a fresh, compacted edgelist instead, which
+allocates a new list but lays the neighborlists out in vertex order.
+
+Renumbering the remaining vertices needs one scratch entry per vertex, which `buffer` supplies and
+which is grown to fit if it is too short. Hoist it out of a loop that shrinks a graph repeatedly:
+
+```julia
+buffer = Vector{Cint}(undef, nv(g))
+for inds in batches
+    rem_vertices!(g, inds; buffer)
+end
+```
 """
-function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
+function Graphs.rem_vertices!(g::SparseNautyGraph, inds; compact=false, buffer=Vector{Cint}(undef, nv(g)))
     isempty(inds) && return true
     all(i->has_vertex(g, i), inds) || return false
     # checked before anything is mutated, so that bad indices cannot leave a half-deleted graph
@@ -580,8 +594,10 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
 
     # `remap[v]` is the new index of old vertex `v`, or zero if `v` is being removed. Renumbering is
     # what needs this: a neighborlist is in no particular order, so the shift of each entry has to be
-    # looked up rather than counted along.
-    remap = Vector{Cint}(undef, g.nv)
+    # looked up rather than counted along. Walking `inds` alongside the vertices writes every entry,
+    # so a reused buffer needs no clearing first.
+    remap = buffer
+    length(remap) < g.nv && resize!(remap, g.nv)
     nkept = 0
     removal = iterate(inds)
     for v in Base.OneTo(g.nv)
@@ -594,14 +610,15 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
         end
     end
 
-    # The surviving neighborlists are gathered into a fresh edgelist because they are not necessarily
-    # laid out in vertex order. This costs one pass and leaves the result packed.
-    edgelist = Vector{Cint}(undef, g.nde)
+    # Both modes keep the same neighbors in the same order and differ only in where they put them:
+    # compacting appends each surviving list to a fresh edgelist, while the default writes each list
+    # back over itself. Either way the write position never overtakes the read position.
+    edgelist = compact ? Vector{Cint}(undef, g.nde) : g.e
     written = 0
     for v in Base.OneTo(g.nv)
         offset, olddegree = Int(g.v[v]), Int(g.d[v])
         kept = remap[v]
-        target = written
+        target = compact ? written : offset
 
         degree = 0
         if !iszero(kept)
@@ -616,11 +633,21 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
             g.d[kept] = degree
             written += degree
         end
+
+        if !compact && olddegree > degree
+            # a removed vertex frees its whole list, a surviving one whatever it no longer needs
+            for pos in (offset + degree + 1):(offset + olddegree)
+                g.e[pos] = NONEIGHBOR
+            end
+            g._freeslot = min(g._freeslot, offset + degree + 1)
+        end
     end
 
-    resize!(edgelist, written)
-    g.e = edgelist
-    g._freeslot = written + 1 # the rebuilt edgelist is packed, so it has no free slots at all
+    if compact
+        resize!(edgelist, written)
+        g.e = edgelist
+        g._freeslot = written + 1
+    end
     resize!(g.v, nkept)
     resize!(g.d, nkept)
     deleteat!(g._labels, inds)
@@ -632,11 +659,13 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
 end
 
 """
-    rem_vertex!(g::SparseNautyGraph, i::Integer)
+    rem_vertex!(g::SparseNautyGraph, i::Integer; compact=false, buffer=Vector{Cint}(undef, nv(g)))
 
 Remove vertex `i` from `g`. Return `false` without modifying `g` if `i` is not a vertex of `g`.
+
+See [`rem_vertices!`](@ref) for what `compact` and `buffer` do.
 """
-Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, i:i)
+Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer; kwargs...) = rem_vertices!(g, i:i; kwargs...)
 
 function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1,D2}
     nv = g.nv + h.nv

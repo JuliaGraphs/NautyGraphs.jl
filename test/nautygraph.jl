@@ -441,39 +441,91 @@ end
         @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5), Edge(6, 6)]
         check_freeslot(bd)
 
-        ### removing vertices rebuilds the edgelist, so it comes back packed and consistent
-        for D in (false, true)
+        ### removing vertices gives the same graph whether or not the edgelist is compacted
+        for D in (false, true), compact in (false, true)
             source = D ? DiGraph(random_regular_graph(30, 4; rng)) : random_regular_graph(30, 4; rng)
             g = SparseNautyGraph{D}(source)
+            edgelistsize = length(g.e)
             inds = [2, 7, 8, 20]
-            rem_vertices!(g, inds)
+            rem_vertices!(g, inds; compact)
             reference, _ = induced_subgraph(source, setdiff(1:30, inds))
             @test nv(g) == nv(reference)
             @test ne(g) == ne(reference)
             @test edges(g) == edges(reference)
-            @test length(g.e) == g.nde
             @test length(g.v) == length(g.d) == length(labels(g)) == nv(g)
+            check_freeslot(g)
+
+            # compacting hands the freed slots back, the default leaves them for later insertions
+            if compact
+                @test length(g.e) == g.nde
+            else
+                @test length(g.e) == edgelistsize
+            end
+        end
+
+        # the default removal must not allocate a new edgelist
+        g = SpNautyDiGraph(DiGraph(random_regular_graph(200, 4; rng)))
+        edgelist = g.e
+        rem_vertices!(g, [3, 40, 41, 150])
+        @test g.e === edgelist
+
+        # a neighborlist started after the removal picks up one of the freed slots
+        before = length(g.e)
+        add_vertex!(g)
+        @test add_edge!(g, nv(g), 1)
+        @test length(g.e) == before
+        check_freeslot(g)
+
+        # removing every vertex leaves an empty graph either way
+        for compact in (false, true)
+            g = SpNautyGraph(cycle_graph(5))
+            @test rem_vertices!(g, 1:5; compact)
+            @test nv(g) == 0
+            @test ne(g) == 0
+            @test g.nde == 0
             check_freeslot(g)
         end
 
-        # removing every vertex leaves an empty graph
-        g = SpNautyGraph(cycle_graph(5))
-        @test rem_vertices!(g, 1:5)
-        @test nv(g) == 0
-        @test ne(g) == 0
-        @test g.nde == 0
-        check_freeslot(g)
+        ### a shared buffer has to give the same answer as a fresh one, however stale or short
+        sharedbuffer = Cint[]
+        for D in (false, true), compact in (false, true)
+            source = D ? DiGraph(random_regular_graph(24, 4; rng)) : random_regular_graph(24, 4; rng)
+            inds = [1, 5, 6, 17]
 
-        ### a single removal goes through the same path
-        for D in (false, true)
+            fresh = SparseNautyGraph{D}(source)
+            rem_vertices!(fresh, inds; compact)
+            shared = SparseNautyGraph{D}(source)
+            rem_vertices!(shared, inds; compact, buffer=sharedbuffer)
+
+            @test fresh == shared
+            @test labels(fresh) == labels(shared)
+            @test (shared.nde, shared._freeslot) == (fresh.nde, fresh._freeslot)
+            @test length(sharedbuffer) >= nv(shared) + length(inds)
+            check_freeslot(shared)
+        end
+
+        # the buffer grows to fit and is reusable across graphs of different sizes
+        buffer = Vector{Cint}(undef, 3)
+        @test buffer isa Vector{Cint}
+        @test length(buffer) == 3
+        for n in (5, 40, 9)
+            g = SpNautyGraph(cycle_graph(n))
+            reference = SpNautyGraph(cycle_graph(n))
+            @test rem_vertices!(g, [2, 3]; buffer)
+            @test rem_vertices!(reference, [2, 3])
+            @test g == reference
+        end
+
+        ### a single removal goes through the same paths
+        for D in (false, true), compact in (false, true)
             source = D ? DiGraph(cycle_graph(7)) : cycle_graph(7)
             g = SparseNautyGraph{D}(source)
-            @test rem_vertex!(g, 3)
+            @test rem_vertex!(g, 3; compact)
             reference, _ = induced_subgraph(source, [1, 2, 4, 5, 6, 7])
             @test nv(g) == nv(reference)
             @test edges(g) == edges(reference)
             check_freeslot(g)
-            @test rem_vertex!(g, 99) == false
+            @test rem_vertex!(g, 99; compact) == false
         end
 
         ### unsorted or repeated indices are rejected before anything is mutated

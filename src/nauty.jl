@@ -673,8 +673,8 @@ function _SHAhash_adjacency(sg, labels)
         throw(ArgumentError("got $(length(labels)) labels for a graph on $(sg.nv) vertices"))
     end
     ctx = SHA.SHA256_CTX()
-    for i in Base.OneTo(sg.nv)
-        _shaupdate!(ctx, _fadj_0based(sg, i))
+    for adjacency in _fadjs_0based(sg)
+        _shaupdate!(ctx, adjacency)
     end
     _shaupdate!(ctx, labels)
     return _digest(ctx)

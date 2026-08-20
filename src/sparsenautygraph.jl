@@ -270,10 +270,29 @@ end
 @inline function _fadj_0based(g::SparseGraphRep, v::Integer)
     # return the adjacency of vertex `v` as an array over nauty's edge list
     # the resulting indices are zero-based
-    # only the neighbour list is wrapped, rather than all three of nauty's arrays
-    offset = unsafe_load(g.v, v)
-    degree = unsafe_load(g.d, v)
+    offset, degree = _adjacencybounds(g, v)
     return unsafe_wrap(Array, g.e + offset * sizeof(Cint), degree)
+end
+
+# Where vertex `v`'s neighbours sit in the edge list, as a zero-based offset and a length (degree).
+@inline _adjacencybounds(g::SparseGraphRep, v::Integer) = (unsafe_load(g.v, v), unsafe_load(g.d, v))
+@inline _adjacencybounds(g::SparseNautyGraph, v::Integer) = (g.v[v], g.d[v])
+
+# The whole edge list as one array.
+@inline _edgelist(g::SparseNautyGraph) = g.e
+@inline function _edgelist(g::SparseGraphRep)
+    # nauty leaves the pointer null for a graph with no edges, which must not be wrapped
+    return iszero(g.nde) ? Cint[] : unsafe_wrap(Array, g.e, g.nde)
+end
+
+@inline _adjacencyview(edgelist, offset, degree) = @view edgelist[(offset + 1):(offset + degree)]
+
+# Iterate the adjacency of every vertex of `g` in order, as zero-based views into its edge list.
+# Unlike calling `_fadj_0based` per vertex, this wraps nauty's edge array only once, which matters
+# for callers that walk the whole graph.
+@inline function _fadjs_0based(g)
+    edgelist = _edgelist(g)
+    return (_adjacencyview(edgelist, _adjacencybounds(g, v)...) for v in Base.OneTo(Int(g.nv)))
 end
 @inline function Graphs.outneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here

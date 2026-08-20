@@ -392,9 +392,17 @@ end
                 @test bb_ng == bb_g
             end
         end
+
     end
 
     @testset "edgelist layout" begin
+        # `_freeslot` promises that no slot before it is free; every operation has to keep that true
+        function check_freeslot(g)
+            @test all(g.e[k] != NautyGraphs.NONEIGHBOR for k in 1:min(g._freeslot - 1, length(g.e)))
+            @test g.nde == count(!=(NautyGraphs.NONEIGHBOR), g.e)
+            return
+        end
+
         ### the vertex offsets are sized for nauty, not inferred from a float literal
         @test SpNautyGraph(5).v isa Vector{Csize_t}
         @test SpNautyDiGraph(5).v isa Vector{Csize_t}
@@ -408,6 +416,7 @@ end
                 @test length(g.e) == g.nde
                 @test ne(g) == ne(source)
                 @test edges(g) == edges(source)
+                check_freeslot(g)
             end
         end
 
@@ -415,6 +424,7 @@ end
         g = SpNautyGraph([0 2 0; 2 0 3; 0 3 0])
         @test ne(g) == 2
         @test length(g.e) == g.nde == 4
+        check_freeslot(g)
 
         ### blockdiag must not renumber the free slots of the right-hand graph into real vertices
         h = SpNautyGraph(3)
@@ -424,11 +434,47 @@ end
         bd = blockdiag(h, h)
         @test bd.nde == count(!=(NautyGraphs.NONEIGHBOR), bd.e)
         @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5)]
+        check_freeslot(bd)
 
         # a vertex of the right-hand graph still has no list of its own, wherever its offset points
         @test add_edge!(bd, 6, 6)
         @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5), Edge(6, 6)]
-        @test bd.nde == count(!=(NautyGraphs.NONEIGHBOR), bd.e)
+        check_freeslot(bd)
+
+        ### removing vertices rebuilds the edgelist, so it comes back packed and consistent
+        for D in (false, true)
+            source = D ? DiGraph(random_regular_graph(30, 4; rng)) : random_regular_graph(30, 4; rng)
+            g = SparseNautyGraph{D}(source)
+            inds = [2, 7, 8, 20]
+            rem_vertices!(g, inds)
+            reference, _ = induced_subgraph(source, setdiff(1:30, inds))
+            @test nv(g) == nv(reference)
+            @test ne(g) == ne(reference)
+            @test edges(g) == edges(reference)
+            @test length(g.e) == g.nde
+            @test length(g.v) == length(g.d) == length(labels(g)) == nv(g)
+            check_freeslot(g)
+        end
+
+        # removing every vertex leaves an empty graph
+        g = SpNautyGraph(cycle_graph(5))
+        @test rem_vertices!(g, 1:5)
+        @test nv(g) == 0
+        @test ne(g) == 0
+        @test g.nde == 0
+        check_freeslot(g)
+
+        ### a single removal goes through the same path
+        for D in (false, true)
+            source = D ? DiGraph(cycle_graph(7)) : cycle_graph(7)
+            g = SparseNautyGraph{D}(source)
+            @test rem_vertex!(g, 3)
+            reference, _ = induced_subgraph(source, [1, 2, 4, 5, 6, 7])
+            @test nv(g) == nv(reference)
+            @test edges(g) == edges(reference)
+            check_freeslot(g)
+            @test rem_vertex!(g, 99) == false
+        end
 
         ### unsorted or repeated indices are rejected before anything is mutated
         for D in (false, true)
@@ -438,6 +484,34 @@ end
                 @test_throws ArgumentError rem_vertices!(g, inds)
                 @test (g.nv, g.nde, g.e, g.v, g.d, labels(g)) == before
             end
+        end
+
+        ### the layout stays consistent under repeated modification, and keeps matching a SimpleGraph
+        for D in (false, true)
+            g = SparseNautyGraph{D}(6)
+            reference = D ? DiGraph(6) : Graph(6)
+            for _ in 1:200
+                op = rand(rng, 1:5)
+                if op <= 2
+                    s, d = rand(rng, 1:nv(g)), rand(rng, 1:nv(g))
+                    @test add_edge!(g, s, d) == add_edge!(reference, s, d)
+                elseif op == 3
+                    s, d = rand(rng, 1:nv(g)), rand(rng, 1:nv(g))
+                    @test rem_edge!(g, s, d) == rem_edge!(reference, s, d)
+                elseif op == 4
+                    add_vertex!(g)
+                    add_vertex!(reference)
+                elseif nv(g) > 1
+                    i = rand(rng, 1:nv(g))
+                    rem_vertices!(g, [i])
+                    kept, _ = induced_subgraph(reference, setdiff(1:nv(reference), [i]))
+                    reference = kept
+                end
+                check_freeslot(g)
+            end
+            @test nv(g) == nv(reference)
+            @test ne(g) == ne(reference)
+            @test edges(g) == edges(reference)
         end
     end
 

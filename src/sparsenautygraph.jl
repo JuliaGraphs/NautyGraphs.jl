@@ -13,6 +13,7 @@ mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
     e::Vector{Cint}      # edgelist (zero-based)
     _labels::Vector{Int} # vertex labels
     iscanon::Bool
+    _freeslot::Int       # no slot of `e` before this one is free; see `_add_directed_edge!`
 end
 
 """
@@ -60,7 +61,7 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     else
         vertex_labels = copy(vertex_labels)
     end
-    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false)
+    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false, 1)
 end
 
 """
@@ -109,13 +110,38 @@ function SparseNautyGraph{D}(edge_list::Vector{<:AbstractEdge}; vertex_labels=no
         nvg = max(nvg, src(e), dst(e))
     end
 
-    # an undirected graph stores each edge in both directions; `trim_edgelist!` gives back whatever
-    # this over-estimates, and over-estimating is much cheaper than growing the list edge by edge
-    g = SparseNautyGraph{D}(nvg; vertex_labels, ne=D ? length(edge_list) : 2 * length(edge_list))
+    g = SparseNautyGraph{D}(nvg; vertex_labels, ne=0)
+    return _fill_from_edges!(g, edge_list)
+end
+
+# Lay out the neighborlists of an edgeless `g` in a single pass. Adding the edges one at a time
+# instead makes each edge that lands in an already-occupied slot shift the whole edgelist, which is
+# what an unsorted edge list does to every reverse edge of an undirected graph.
+function _fill_from_edges!(g::SparseNautyGraph{D}, edge_list) where {D}
+    # sorting puts each vertex's neighbors next to each other, and duplicate edges next to each other
+    stored = Vector{Tuple{Int,Int}}(undef, 0)
+    sizehint!(stored, D ? length(edge_list) : 2 * length(edge_list))
     for edge in edge_list
-        add_edge!(g, edge)
+        s, d = Int(src(edge)), Int(dst(edge))
+        (has_vertex(g, s) && has_vertex(g, d)) || continue
+        push!(stored, (s, d))
+        (D || s == d) || push!(stored, (d, s))
     end
-    trim_edgelist!(g)
+    sort!(stored)
+
+    resize!(g.e, length(stored))
+    written = 0
+    for (k, (s, d)) in enumerate(stored)
+        k > 1 && stored[k - 1] == (s, d) && continue
+        written += 1
+        g.e[written] = one2zero(d)
+        iszero(g.d[s]) && (g.v[s] = written - 1)
+        g.d[s] += 1
+    end
+
+    resize!(g.e, written)
+    g.nde = written
+    g._freeslot = written + 1
     return g
 end
 
@@ -141,7 +167,9 @@ function SparseNautyGraph{D}(g::AbstractGraph; vertex_labels=nothing) where {D}
 end
 SparseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = SparseNautyGraph{is_directed(g)}(g; vertex_labels)
 
-Base.copy(g::G) where {G<:SparseNautyGraph} = G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon)
+function Base.copy(g::G) where {G<:SparseNautyGraph}
+    return G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon, g._freeslot)
+end
 function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
     copy!(dest.v, src.v)
     copy!(dest.d, src.d)
@@ -151,6 +179,7 @@ function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
     dest.nv = src.nv
     dest.nde = src.nde
     dest.iscanon = src.iscanon
+    dest._freeslot = src._freeslot
     return dest
 end
 
@@ -214,6 +243,8 @@ function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphR
     copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
     copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
     copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
+    # nauty's layout is its own, so the hint has to start over
+    g._freeslot = 1
     return
 end
 function _free_sparsegraphrep(srep::SparseGraphRep)
@@ -334,7 +365,8 @@ function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph}, state)
 
     w = zero2one(g.e[g.v[i] + nidx])
 
-    if !is_directed(g) && w < i && has_edge(g, i, w)
+    # `w` came out of `i`'s own neighborlist, so an undirected graph has already emitted `(w, i)`
+    if !is_directed(g) && w < i
         return Base.iterate(eit, (i, nidx + 1))
     else
         return Graphs.SimpleEdge{Int}(i, w), (i, nidx + 1)
@@ -430,6 +462,7 @@ function trim_edgelist!(g::SparseNautyGraph)
         excess_length += 1
     end
     resize!(g.e, length(g.e) - excess_length)
+    g._freeslot = min(g._freeslot, length(g.e) + 1)
     return excess_length
 end
 
@@ -452,11 +485,14 @@ function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     # then `g.v[i]` may point anywhere (`blockdiag` leaves it offset), so the degree rather than the
     # position is what decides.
     if iszero(g.d[i]) && !isfree
-        freeidx = findfirst(==(NONEIGHBOR), g.e)
+        # `_freeslot` is a lower bound on the position of the first free spot, which keeps building a
+        # graph edge by edge linear rather than rescanning the whole edgelist for every new vertex
+        freeidx = findnext(==(NONEIGHBOR), g.e, min(g._freeslot, length(g.e) + 1))
         # If there is no free spot, we will append at the end
         idx = isnothing(freeidx) ? length(g.e) + 1 : freeidx
         g.v[i] = one2zero(idx)
         isfree = !isnothing(freeidx)
+        g._freeslot = idx + 1
     end
 
     # If there is a free spot at the end of the list, append j
@@ -496,11 +532,13 @@ function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
 
     if idx == d
         g.e[vrem] = NONEIGHBOR
+        g._freeslot = min(g._freeslot, vrem)
     else
         # Swap with the last edge and remove
         elast = g.e[vlast]
         g.e[vrem] = elast
         g.e[vlast] = NONEIGHBOR
+        g._freeslot = min(g._freeslot, vlast)
     end
     g.d[i] -= 1
     g.nde -= 1
@@ -528,44 +566,77 @@ end
 Graphs.add_vertex!(g::SparseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
 Graphs.add_vertices!(g::SparseNautyGraph; vertex_labels=0) = Graphs.add_vertices!(g, length(vertex_labels); vertex_labels)
 
+"""
+    rem_vertices!(g::SparseNautyGraph, inds)
+
+Remove the vertices `inds` from `g`, which must be given in increasing order.
+Return `false` without modifying `g` if any of `inds` is not a vertex of `g`.
+"""
 function Graphs.rem_vertices!(g::SparseNautyGraph, inds)
     isempty(inds) && return true
     all(i->has_vertex(g, i), inds) || return false
     # checked before anything is mutated, so that bad indices cannot leave a half-deleted graph
     issorted(inds, lt=<=) || throw(ArgumentError("indices must be unique and sorted"))
 
-    for i in vertices(g)
-        if i in inds
-            vstart, d = zero2one(g.v[i]), g.d[i]
-            d == 0 && continue
-
-            vend = vstart + d - 1
-            # Free memory for outneighbors
-            deleteat!(g.e, vstart:vend)
-            # TODO: this redundantly shifts indices that will be deleted below
-            @. g.v = ifelse(g.v > one2zero(vend), g.v - d, g.v)
+    # `remap[v]` is the new index of old vertex `v`, or zero if `v` is being removed. Renumbering is
+    # what needs this: a neighborlist is in no particular order, so the shift of each entry has to be
+    # looked up rather than counted along.
+    remap = Vector{Cint}(undef, g.nv)
+    nkept = 0
+    removal = iterate(inds)
+    for v in Base.OneTo(g.nv)
+        if !isnothing(removal) && first(removal) == v
+            remap[v] = 0
+            removal = iterate(inds, last(removal))
         else
-            # Keep memory for inneighbors
-            for j in inds
-                _rem_directed_edge!(g, i, j)
-            end
+            nkept += 1
+            remap[v] = nkept
         end
     end
-    deleteat!(g.v, inds)
-    deleteat!(g.d, inds)
-    deleteat!(g._labels, inds)
 
-    # shift vertices in edge list
-    for i in eachindex(g.e)
-        g.e[i] -= sum(<(zero2one(g.e[i])), inds)
+    # The surviving neighborlists are gathered into a fresh edgelist because they are not necessarily
+    # laid out in vertex order. This costs one pass and leaves the result packed.
+    edgelist = Vector{Cint}(undef, g.nde)
+    written = 0
+    for v in Base.OneTo(g.nv)
+        offset, olddegree = Int(g.v[v]), Int(g.d[v])
+        kept = remap[v]
+        target = written
+
+        degree = 0
+        if !iszero(kept)
+            for pos in (offset + 1):(offset + olddegree)
+                neighbor = remap[zero2one(g.e[pos])]
+                iszero(neighbor) && continue
+                degree += 1
+                edgelist[target + degree] = one2zero(neighbor)
+            end
+            # `kept <= v`, so this only overwrites entries that have already been read
+            g.v[kept] = target
+            g.d[kept] = degree
+            written += degree
+        end
     end
 
-    g.nv = length(g.v)
-    g.nde = sum(!=(NONEIGHBOR), g.e; init=0)
+    resize!(edgelist, written)
+    g.e = edgelist
+    g._freeslot = written + 1 # the rebuilt edgelist is packed, so it has no free slots at all
+    resize!(g.v, nkept)
+    resize!(g.d, nkept)
+    deleteat!(g._labels, inds)
+
+    g.nv = nkept
+    g.nde = written
     g.iscanon = false
     return true
 end
-Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, (i,))
+
+"""
+    rem_vertex!(g::SparseNautyGraph, i::Integer)
+
+Remove vertex `i` from `g`. Return `false` without modifying `g` if `i` is not a vertex of `g`.
+"""
+Graphs.rem_vertex!(g::SparseNautyGraph, i::Integer) = rem_vertices!(g, i:i)
 
 function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) where {D1,D2}
     nv = g.nv + h.nv
@@ -582,5 +653,6 @@ function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) wher
     iscanon = false
 
     D = D1 || D2
-    return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon)
+    # `g.e` is copied over unchanged, so its free slots are still the first ones in the result
+    return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon, g._freeslot)
 end

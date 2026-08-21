@@ -162,19 +162,49 @@ end
 # function minimize_padding!(gset::Graphset{W}) where {W}
 # end
 
-@inline function partial_leftshift(word::Unsigned, n::Integer, start::Integer, fillword::Unsigned=zero(word))
-    # Starting from the `start`th bit from the left of `word`, shift all bits to the left `n` times,
-    # refill right-most bits with bits from `fillword`. The `n` bits to the left of `start` are
-    # overwritten.
+# Bit ranges within a row of `m` words are addressed by a zero-based position counted from the most
+# significant bit of the row's first word, which is the order `bitaddress` lays a vertex out in.
+@inline _topmask(::Type{W}, len::Integer) where {W} = typemax(W) << (wordsize(W) - len)
 
-    # Select all to-be-moved bits
-    mask = typemax(word) >> (start - 1)
+# Read the `len <= wordsize(W)` bits at `pos`, returned aligned to the top of a word.
+@inline function _readbits(words::Vector{W}, base::Integer, pos::Integer, len::Integer) where {W}
+    ws = wordsize(W)
+    idx = base + divlogpow2(logwordsize(W), pos) + 1
+    offset = pos & (ws - 1)
+    bits = words[idx] << offset
+    if offset + len > ws
+        bits |= words[idx + 1] >> (ws - offset)
+    end
+    return bits & _topmask(W, len)
+end
 
-    unshifted_part = word & (~mask << n)
-    shifted_part = (word & mask) << n
-    filled_part = fillword >> (wordsize(typeof(word)) - n)
+# Write the top `len <= wordsize(W)` bits of `bits` at `pos`, leaving the surrounding bits alone.
+@inline function _writebits!(words::Vector{W}, base::Integer, pos::Integer, len::Integer, bits::W) where {W}
+    ws = wordsize(W)
+    idx = base + divlogpow2(logwordsize(W), pos) + 1
+    offset = pos & (ws - 1)
+    mask = _topmask(W, len) >> offset
+    words[idx] = (words[idx] & ~mask) | ((bits >> offset) & mask)
+    if offset + len > ws
+        tailmask = _topmask(W, offset + len - ws)
+        words[idx + 1] = (words[idx + 1] & ~tailmask) | ((bits << (ws - offset)) & tailmask)
+    end
+    return
+end
 
-    return unshifted_part | shifted_part | filled_part
+# Move `len` bits of a row from `from` to the earlier position `to`. Each chunk is read before it is
+# written, so the two ranges may overlap.
+@inline function _movebits!(words::Vector{W}, base::Integer, from::Integer, to::Integer, len::Integer) where {W}
+    from == to && return
+    ws = wordsize(W)
+    while len > 0
+        chunk = min(len, ws)
+        _writebits!(words, base, to, chunk, _readbits(words, base, from, chunk))
+        from += chunk
+        to += chunk
+        len -= chunk
+    end
+    return
 end
 
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
@@ -192,25 +222,36 @@ function _rem_vertices!(gset::Graphset{W}, inds) where {W}
     # checked before anything is mutated, so that bad indices cannot leave a half-shifted graphset
     issorted(inds, lt=<=) || throw(ArgumentError("indices must be unique and sorted"))
 
+    nold = gset.n
     deleteat!(gset.words, Iterators.flatten(1+(i-1)*gset.m:i*gset.m for i in inds))
     gset.n -= nrv
 
-    n, m = gset.n, gset.m
-    linidx = LinearIndices((m, n))'
-
-    δ = 0
-    for ind in inds
-        wordidx, bitidx = bitaddress(gset, 1, ind - δ)
-        for i in 1:n
-            fillword = wordidx == m ? zero(W) : gset.words[linidx[i, wordidx+1]]
-            gset.words[linidx[i, wordidx]] = partial_leftshift(gset.words[linidx[i, wordidx]], 1, bitidx+1, fillword)
-
-            for j in wordidx+1:m
-                fillword = j == m ? zero(W) : gset.words[linidx[i, j+1]]
-                gset.words[linidx[i, j]] = partial_leftshift(gset.words[linidx[i, j]], 1, 1, fillword)
+    n, m, ws = gset.n, gset.m, wordsize(W)
+    for i in Base.OneTo(n)
+        # The surviving columns form runs between the removed ones. Moving each run straight to where
+        # it belongs costs one pass over the row, where shifting once per removed column costs `nrv`.
+        base = (i - 1) * m
+        written = 0
+        previous = 0
+        for ind in inds
+            runlength = ind - previous - 1
+            if runlength > 0
+                _movebits!(gset.words, base, previous, written, runlength)
+                written += runlength
             end
+            previous = ind
         end
-        δ += 1
+        _movebits!(gset.words, base, previous, written, nold - previous)
+
+        # the columns the runs vacated have to read as zero, so that padding never reaches nauty
+        stale = m * ws - n
+        position = n
+        while stale > 0
+            chunk = min(stale, ws)
+            _writebits!(gset.words, base, position, chunk, zero(W))
+            position += chunk
+            stale -= chunk
+        end
     end
     return gset
 end

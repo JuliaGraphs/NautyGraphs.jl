@@ -101,6 +101,36 @@ end
         @test gs.words == reference
     end
 
+    ### removing several vertices at once moves whole runs of columns, not one column at a time
+    for W in (UInt8, UInt16, UInt32, UInt64), n in [1, 5, 8, 9, 16, 17, 63, 64, 65, 100]
+        A = rand(rng, Bool, n, n)
+        for extra_m in (0, 2)
+            inds = sort(randperm(rng, n)[1:rand(rng, 1:n)])
+            keep = setdiff(1:n, inds)
+            gs = Graphset{W}(A, cld(n, NautyGraphs.wordsize(W)) + extra_m)
+            NautyGraphs._rem_vertices!(gs, inds)
+
+            @test gs.n == length(keep)
+            @test collect(gs) == A[keep, keep]
+            # the vacated columns have to read as zero, or the padding reaches nauty and the hash
+            @test gs == Graphset{W}(A[keep, keep], gs.m)
+        end
+    end
+
+    # a bulk removal has to agree with the same removals done one at a time
+    for W in (UInt8, UInt64), n in (10, 70, 130)
+        A = rand(rng, Bool, n, n)
+        inds = sort(randperm(rng, n)[1:rand(rng, 1:(n ÷ 2))])
+        bulk = Graphset{W}(A)
+        NautyGraphs._rem_vertices!(bulk, inds)
+        onebyone = Graphset{W}(A)
+        for ind in reverse(inds)
+            NautyGraphs._rem_vertex!(onebyone, ind)
+        end
+        @test bulk == onebyone
+        @test collect(bulk) == collect(onebyone)
+    end
+
     @testset "_maybe_copy_active_words" begin
         for W in (UInt16, UInt32, UInt64), n in [0, 1, 15, 16, 17, 63, 64, 65, 200]
             A = rand(rng, Bool, n, n)

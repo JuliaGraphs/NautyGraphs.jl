@@ -72,6 +72,26 @@ end
     @test Graphset{UInt64}(5, 1) != Graphset{UInt64}(10, 1)
     @test Graphset{UInt64}(64, 1) != Graphset{UInt64}(128, 2)
 
+    ### padding is spread in place, so it has to leave every row's content where it belongs
+    for W in (UInt8, UInt64), n in [0, 1, 5, 8, 9, 64, 65, 130]
+        A = rand(rng, Bool, n, n)
+        gs = Graphset{W}(A)
+        reference = collect(gs)
+        for Δm in (1, 3, 1)
+            increase_padding!(gs, Δm)
+            @test collect(gs) == reference
+            @test length(gs.words) == gs.n * gs.m
+        end
+        @test gs == Graphset{W}(A)
+    end
+
+    # a non-positive increment is a no-op rather than a corruption
+    gs = Graphset{UInt64}(rand(rng, Bool, 20, 20))
+    reference = collect(gs)
+    increase_padding!(gs, 0)
+    @test collect(gs) == reference
+    @test length(gs.words) == gs.n * gs.m
+
     ### unsorted or repeated indices are rejected before anything is mutated
     gs = Graphset{UInt64}(rand(rng, Bool, 6, 6))
     reference = copy(gs.words)

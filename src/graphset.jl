@@ -142,11 +142,17 @@ end
 end
 
 function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
-    for _ in Base.OneTo(Δm)
-        gset.m += 1
-        for i in Base.OneTo(gset.n)
-            insert!(gset.words, i * gset.m, zero(W))
-        end
+    Δm > 0 || return gset
+
+    oldm = gset.m
+    gset.m += Δm
+    resize!(gset.words, gset.n * gset.m)
+
+    # Spreading the rows apart in place has to run back to front, so that a row is only ever moved
+    # into space its successor has already vacated.
+    for i in gset.n:-1:1
+        copyto!(gset.words, (i - 1) * gset.m + 1, gset.words, (i - 1) * oldm + 1, oldm)
+        fill!(view(gset.words, ((i - 1) * gset.m + oldm + 1):(i * gset.m)), zero(W))
     end
     return gset
 end
@@ -173,7 +179,9 @@ end
 
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
     increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
-    append!(gset.words, fill(zero(W), n*gset.m))
+    oldlength = length(gset.words)
+    resize!(gset.words, oldlength + n * gset.m)
+    fill!(view(gset.words, (oldlength + 1):length(gset.words)), zero(W))
     gset.n += n
     return gset
 end

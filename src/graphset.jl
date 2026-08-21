@@ -207,6 +207,29 @@ end
     return
 end
 
+# Copy `src` into the diagonal block of `dest` starting at row and column `offset`, which is assumed
+# to be zero. Going through whole words is what makes this cheaper than a bit-by-bit broadcast.
+function _copyblock!(dest::Graphset{W}, src::Graphset{W}, offset::Integer) where {W}
+    ws = wordsize(W)
+    for i in Base.OneTo(src.n)
+        destbase = (offset + i - 1) * dest.m
+        srcbase = (i - 1) * src.m
+        position = 0
+        while position < src.n
+            chunk = min(src.n - position, ws)
+            _writebits!(dest.words, destbase, offset + position, chunk,
+                    _readbits(src.words, srcbase, position, chunk))
+            position += chunk
+        end
+    end
+    return dest
+end
+# word types can differ, in which case there is nothing to copy word by word
+function _copyblock!(dest::Graphset, src::Graphset, offset::Integer)
+    dest[(offset + 1):(offset + src.n), (offset + 1):(offset + src.n)] .= src
+    return dest
+end
+
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
     increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
     oldlength = length(gset.words)

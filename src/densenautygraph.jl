@@ -26,6 +26,10 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end
 
+function DenseNautyGraph{D,W}(graphset::Graphset{W}; vertex_labels=nothing) where {D,W<:Unsigned}
+    return DenseNautyGraph{D}(graphset; vertex_labels)
+end
+
 """
     NautyGraph <: AbstractNautyGraph{Int}
 
@@ -290,8 +294,8 @@ function Graphs.blockdiag(g::DenseNautyGraph{D1,W}, h::DenseNautyGraph{D2}) wher
     ng, nh = nv(g), nv(h)
 
     gset = Graphset{wordtype(g.graphset)}(ng+nh)
-    gset[1:ng, 1:ng] .= g.graphset
-    gset[ng+1:end, ng+1:end] .= h.graphset
+    _copyblock!(gset, g.graphset, 0)
+    _copyblock!(gset, h.graphset, ng)
     D = D1 || D2
     return DenseNautyGraph{D,W}(gset; vertex_labels=vcat(labels(g), labels(h)))
 end

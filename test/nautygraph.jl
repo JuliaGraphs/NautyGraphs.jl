@@ -393,6 +393,38 @@ end
             end
         end
 
+        ### the dense blocks are copied word by word, which has to survive every offset and word type
+        for W in (UInt8, UInt16, UInt32, UInt64), ng in (0, 1, 7, 8, 9, 17, 63, 64, 65), nh in (0, 1, 8, 17, 65)
+            Ag = rand(rng, Bool, ng, ng)
+            Ag = Ag .| transpose(Ag)
+            Ah = rand(rng, Bool, nh, nh)
+            Ah = Ah .| transpose(Ah)
+
+            bd = blockdiag(DenseNautyGraph{false,W}(Ag), DenseNautyGraph{false,W}(Ah))
+            reference = zeros(Bool, ng + nh, ng + nh)
+            reference[1:ng, 1:ng] = Ag
+            reference[(ng + 1):end, (ng + 1):end] = Ah
+
+            @test nv(bd) == ng + nh
+            @test collect(bd.graphset) == reference
+            @test ne(bd) == ne(DenseNautyGraph{false,W}(Ag)) + ne(DenseNautyGraph{false,W}(Ah))
+        end
+
+        # graphs of different word types fall back to an elementwise copy
+        Ag = rand(rng, Bool, 20, 20)
+        Ag = Ag .| transpose(Ag)
+        Ah = rand(rng, Bool, 13, 13)
+        Ah = Ah .| transpose(Ah)
+        bd = blockdiag(DenseNautyGraph{false,UInt64}(Ag), DenseNautyGraph{false,UInt32}(Ah))
+        reference = zeros(Bool, 33, 33)
+        reference[1:20, 1:20] = Ag
+        reference[21:end, 21:end] = Ah
+        @test collect(bd.graphset) == reference
+
+        ### naming the word type must not send a graphset through the `AbstractMatrix` constructor
+        gset = NautyGraphs.Graphset{UInt64}(rand(rng, Bool, 12, 12))
+        @test DenseNautyGraph{true,UInt64}(gset).graphset === gset
+        @test DenseNautyGraph{true}(gset).graphset === gset
     end
 
     @testset "edgelist layout" begin

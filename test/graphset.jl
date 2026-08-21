@@ -92,6 +92,42 @@ end
     @test collect(gs) == reference
     @test length(gs.words) == gs.n * gs.m
 
+    ### padding can be given back again, leaving every row's content where it belongs
+    for W in (UInt8, UInt16, UInt32, UInt64), n in [0, 1, 5, 8, 9, 64, 65, 130]
+        A = rand(rng, Bool, n, n)
+        mmin = cld(n, NautyGraphs.wordsize(W))
+        gs = Graphset{W}(A, mmin + 3)
+        reference = collect(gs)
+
+        NautyGraphs.decrease_padding!(gs, 2)
+        @test gs.m == mmin + 1
+        @test collect(gs) == reference
+        @test length(gs.words) == gs.n * gs.m
+        @test gs == Graphset{W}(A, gs.m)
+
+        NautyGraphs.minimize_padding!(gs)
+        @test gs.m == mmin
+        @test collect(gs) == reference
+        @test gs == Graphset{W}(A)
+
+        # widening and narrowing again has to come back to where it started
+        increase_padding!(gs, 4)
+        NautyGraphs.minimize_padding!(gs)
+        @test gs.m == mmin
+        @test collect(gs) == reference
+    end
+
+    # a graphset that is already minimal is left alone, and dropping more is refused
+    gs = Graphset{UInt64}(rand(rng, Bool, 70, 70))
+    reference = collect(gs)
+    @test gs.m == 2
+    @test_throws ArgumentError NautyGraphs.decrease_padding!(gs, 2)
+    NautyGraphs.minimize_padding!(gs)
+    NautyGraphs.minimize_padding!(gs)
+    @test gs.m == 2
+    @test collect(gs) == reference
+    @test NautyGraphs.decrease_padding!(gs, 0) === gs
+
     ### unsorted or repeated indices are rejected before anything is mutated
     gs = Graphset{UInt64}(rand(rng, Bool, 6, 6))
     reference = copy(gs.words)

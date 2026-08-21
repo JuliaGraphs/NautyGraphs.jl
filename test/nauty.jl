@@ -433,9 +433,8 @@ using NautyGraphs: NautyOptions, NautyStatistics
 
         # excess padding words must not change the hash of an otherwise equal graph
         a = NautyGraph(erdos_renyi(12, 0.4; seed=1))
-        b = NautyGraph(90)
-        for _ in 1:(nv(b) - nv(a)); rem_vertex!(b, nv(b)); end
-        for e in edges(a); add_edge!(b, src(e), dst(e)); end
+        b = copy(a)
+        increase_padding!(b.graphset, 2)
         @test b.graphset.m > cld(nv(b), 64)
         @test a == b && canonical_id(a) == canonical_id(b)
     end

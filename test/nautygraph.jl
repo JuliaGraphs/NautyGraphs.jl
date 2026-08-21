@@ -421,6 +421,37 @@ end
         reference[21:end, 21:end] = Ah
         @test collect(bd.graphset) == reference
 
+        ### compactifying a removal gives back the words the survivors no longer need
+        for D in (false, true), (n0, keep) in ((80, 5), (200, 70), (300, 64)), compactify in (false, true)
+            A = rand(rng, Bool, n0, n0)
+            D || (A = A .| transpose(A))
+            g = DenseNautyGraph{D}(A)
+            widthbefore = g.graphset.m
+            rem_vertices!(g, collect((keep + 1):n0); compactify)
+
+            @test nv(g) == keep
+            @test length(g.graphset.words) == g.graphset.n * g.graphset.m
+            if compactify
+                @test g.graphset.m == cld(keep, NautyGraphs.wordsize(UInt))
+            else
+                @test g.graphset.m == widthbefore
+            end
+
+            # either way the graph is indistinguishable from the same one built directly
+            reference = DenseNautyGraph{D}(A[1:keep, 1:keep])
+            @test g == reference
+            @test ne(g) == ne(reference)
+            @test hash(g) == hash(reference)
+            @test canonical_id(g) == canonical_id(reference)
+        end
+
+        # a single removal takes the flag too
+        A = rand(rng, Bool, 70, 70)
+        g = NautyGraph(A .| transpose(A))
+        @test rem_vertex!(g, 70; compactify=true)
+        @test g.graphset.m == cld(69, NautyGraphs.wordsize(UInt))
+        @test rem_vertex!(g, 99; compactify=true) == false
+
         ### naming the word type must not send a graphset through the `AbstractMatrix` constructor
         gset = NautyGraphs.Graphset{UInt64}(rand(rng, Bool, 12, 12))
         @test DenseNautyGraph{true,UInt64}(gset).graphset === gset

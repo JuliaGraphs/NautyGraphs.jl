@@ -156,11 +156,34 @@ function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
     end
     return gset
 end
-# function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
-#     return gset
-# end
-# function minimize_padding!(gset::Graphset{W}) where {W}
-# end
+function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+    Δm > 0 || return gset
+    newm = gset.m - Δm
+    if newm < cld(gset.n, wordsize(W))
+        throw(ArgumentError("Cannot drop $Δm words of padding: n=$(gset.n) needs at least " *
+                "$(cld(gset.n, wordsize(W))) word(s) per vertex."))
+    end
+
+    oldm = gset.m
+    gset.m = newm
+    # Closing the gaps between rows in place has to run front to back, so that a row is only ever
+    # moved into space its predecessor has already vacated.
+    for i in Base.OneTo(gset.n)
+        copyto!(gset.words, (i - 1) * newm + 1, gset.words, (i - 1) * oldm + 1, newm)
+    end
+
+    newlength = gset.n * newm
+    if 2 * newlength < length(gset.words)
+        # `resize!` hands back the length but keeps the buffer, so a large drop gets a new array
+        gset.words = gset.words[Base.OneTo(newlength)]
+    else
+        resize!(gset.words, newlength)
+    end
+    return gset
+end
+
+# Drop the padding that is not needed to hold `gset.n` vertices.
+minimize_padding!(gset::Graphset{W}) where {W} = decrease_padding!(gset, gset.m - cld(gset.n, wordsize(W)))
 
 # Bit ranges within a row of `m` words are addressed by a zero-based position counted from the most
 # significant bit of the row's first word, which is the order `bitaddress` lays a vertex out in.

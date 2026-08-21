@@ -14,6 +14,7 @@ mutable struct SparseNautyGraph{D} <: AbstractNautyGraph{Int}
     _labels::Vector{Int} # vertex labels
     iscanon::Bool
     _freeslot::Int       # no slot of `e` before this one is free; see `_add_directed_edge!`
+    _nloops::Int         # self-loops, which `ne` needs and which cost a pass over `e` to count
 end
 
 """
@@ -61,7 +62,7 @@ function SparseNautyGraph{D}(n::Integer; vertex_labels=nothing, ne=n) where {D}
     else
         vertex_labels = copy(vertex_labels)
     end
-    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false, 1)
+    return SparseNautyGraph{D}(n, 0, v, d, e, vertex_labels, false, 1, 0)
 end
 
 """
@@ -131,17 +132,20 @@ function _fill_from_edges!(g::SparseNautyGraph{D}, edge_list) where {D}
 
     resize!(g.e, length(stored))
     written = 0
+    loops = 0
     for (k, (s, d)) in enumerate(stored)
         k > 1 && stored[k - 1] == (s, d) && continue
         written += 1
         g.e[written] = one2zero(d)
         iszero(g.d[s]) && (g.v[s] = written - 1)
         g.d[s] += 1
+        s == d && (loops += 1)
     end
 
     resize!(g.e, written)
     g.nde = written
     g._freeslot = written + 1
+    g._nloops = loops
     return g
 end
 
@@ -168,7 +172,8 @@ end
 SparseNautyGraph(g::AbstractGraph; vertex_labels=nothing) = SparseNautyGraph{is_directed(g)}(g; vertex_labels)
 
 function Base.copy(g::G) where {G<:SparseNautyGraph}
-    return G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon, g._freeslot)
+    return G(g.nv, g.nde, copy(g.v), copy(g.d), copy(g.e), copy(g._labels), g.iscanon, g._freeslot,
+            g._nloops)
 end
 function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
     copy!(dest.v, src.v)
@@ -180,6 +185,7 @@ function Base.copy!(dest::G, src::G) where {G<:SparseNautyGraph}
     dest.nde = src.nde
     dest.iscanon = src.iscanon
     dest._freeslot = src._freeslot
+    dest._nloops = src._nloops
     return dest
 end
 
@@ -274,13 +280,9 @@ end
 
 Graphs.nv(g::SparseNautyGraph) = g.nv
 function Graphs.ne(g::SparseNautyGraph)
-    if nv(g) == 0
-        return 0
-    elseif is_directed(g)
-        return g.nde
-    else
-        return (g.nde + sum(has_edge(g, i, i) for i in vertices(g))) ÷ 2
-    end
+    is_directed(g) && return g.nde
+    # an undirected edge is stored twice unless it is a self-loop, which is stored once
+    return (g.nde + g._nloops) ÷ 2
 end
 Graphs.vertices(g::SparseNautyGraph) = Base.OneTo(g.nv)
 Graphs.has_vertex(g::SparseNautyGraph, v::Integer) = v ∈ vertices(g)
@@ -334,7 +336,11 @@ end
 end
 @inline function Graphs.indegree(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
-    return is_directed(g) ? sum(has_edge(g, i, v) for i in vertices(g)) : outdegree(g, v)
+    is_directed(g) || return outdegree(g, v)
+    # Every entry of the edgelist that names `v` is an edge into `v`, and free slots hold
+    # `NONEIGHBOR`, so they never match. Reaching in-edges needs a sweep either way, but this one is
+    # a single flat pass rather than a `has_edge` scan per vertex.
+    return count(==(one2zero(Cint(v))), g.e)
 end
 @inline function Graphs.inneighbors(g::SparseNautyGraph, v::Integer)
     # following the Graph.jl implementation, there is no boundscheck here
@@ -509,6 +515,7 @@ function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     end
     g.d[i] += 1
     g.nde += 1
+    i == j && (g._nloops += 1)
     return true
 end
 function Graphs.rem_edge!(g::SparseNautyGraph, e::Edge)
@@ -542,6 +549,7 @@ function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     end
     g.d[i] -= 1
     g.nde -= 1
+    i == j && (g._nloops -= 1)
     g.iscanon = false
     return true
 end
@@ -615,6 +623,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds; compactify=false, buffe
     # back over itself. Either way the write position never overtakes the read position.
     edgelist = compactify ? Vector{Cint}(undef, g.nde) : g.e
     written = 0
+    loops = 0
     for v in Base.OneTo(g.nv)
         offset, olddegree = Int(g.v[v]), Int(g.d[v])
         kept = remap[v]
@@ -627,6 +636,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds; compactify=false, buffe
                 iszero(neighbor) && continue
                 degree += 1
                 edgelist[target + degree] = one2zero(neighbor)
+                neighbor == kept && (loops += 1)
             end
             # `kept <= v`, so this only overwrites entries that have already been read
             g.v[kept] = target
@@ -654,6 +664,7 @@ function Graphs.rem_vertices!(g::SparseNautyGraph, inds; compactify=false, buffe
 
     g.nv = nkept
     g.nde = written
+    g._nloops = loops
     g.iscanon = false
     return true
 end
@@ -683,5 +694,5 @@ function Graphs.blockdiag(g::SparseNautyGraph{D1}, h::SparseNautyGraph{D2}) wher
 
     D = D1 || D2
     # `g.e` is copied over unchanged, so its free slots are still the first ones in the result
-    return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon, g._freeslot)
+    return SparseNautyGraph{D}(nv, nde, v, d, e, labels, iscanon, g._freeslot, g._nloops + h._nloops)
 end

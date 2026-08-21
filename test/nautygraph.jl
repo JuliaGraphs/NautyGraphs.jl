@@ -608,6 +608,60 @@ end
             end
         end
 
+        ### `ne` reads a maintained self-loop count, so it has to survive every way a loop appears
+        loopcount(g) = count(v -> has_edge(g, v, v), vertices(g))
+        for D in (false, true)
+            edgelist = [Edge(1, 1), Edge(1, 2), Edge(2, 2), Edge(2, 3), Edge(1, 1)]
+            matrix = [1 1 0; 1 1 1; 0 1 0]
+            source = D ? DiGraph(3) : Graph(3)
+            add_edge!(source, 1, 1)
+            add_edge!(source, 1, 2)
+
+            for g in (SparseNautyGraph{D}(edgelist), SparseNautyGraph{D}(matrix), SparseNautyGraph{D}(source))
+                @test g._nloops == loopcount(g)
+                @test ne(g) == length(collect(edges(g)))
+            end
+
+            # and through every operation that can add or drop one
+            g = SparseNautyGraph{D}(4)
+            @test add_edge!(g, 2, 2) && add_edge!(g, 1, 2) && add_edge!(g, 3, 3)
+            @test g._nloops == loopcount(g) == 2
+            @test ne(g) == length(collect(edges(g)))
+
+            @test rem_edge!(g, 3, 3)
+            @test g._nloops == loopcount(g) == 1
+            @test copy(g)._nloops == 1
+            @test blockdiag(g, g)._nloops == 2
+            @test ne(blockdiag(g, g)) == 2 * ne(g)
+
+            for compactify in (false, true)
+                h = copy(g)
+                rem_vertices!(h, [2]; compactify)
+                @test h._nloops == loopcount(h) == 0
+                @test ne(h) == length(collect(edges(h)))
+            end
+
+            # canonizing permutes the vertices but cannot change how many loops there are
+            k = copy(g)
+            canonize!(k)
+            @test k._nloops == loopcount(k) == 1
+            @test ne(k) == ne(g)
+        end
+
+        ### in-degree has no reverse index, so it must agree with the forward scan it replaces
+        for n in (1, 6, 40)
+            source = DiGraph(n)
+            for _ in 1:(3n)
+                add_edge!(source, rand(rng, 1:n), rand(rng, 1:n))
+            end
+            g = SpNautyDiGraph(source)
+            n > 2 && rem_edge!(g, first(collect(edges(g))))   # leave free slots in the edgelist
+            for v in vertices(g)
+                @test indegree(g, v) == sum(has_edge(g, i, v) for i in vertices(g))
+                @test indegree(g, v) == length(collect(inneighbors(g, v)))
+            end
+        end
+
         ### the layout stays consistent under repeated modification, and keeps matching a SimpleGraph
         for D in (false, true)
             g = SparseNautyGraph{D}(6)

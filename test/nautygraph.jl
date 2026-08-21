@@ -473,13 +473,13 @@ end
         @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5), Edge(6, 6)]
         check_freeslot(bd)
 
-        ### removing vertices gives the same graph whether or not the edgelist is compacted
-        for D in (false, true), compact in (false, true)
+        ### removing vertices gives the same graph whether or not the edgelist is compactified
+        for D in (false, true), compactify in (false, true)
             source = D ? DiGraph(random_regular_graph(30, 4; rng)) : random_regular_graph(30, 4; rng)
             g = SparseNautyGraph{D}(source)
             edgelistsize = length(g.e)
             inds = [2, 7, 8, 20]
-            rem_vertices!(g, inds; compact)
+            rem_vertices!(g, inds; compactify)
             reference, _ = induced_subgraph(source, setdiff(1:30, inds))
             @test nv(g) == nv(reference)
             @test ne(g) == ne(reference)
@@ -487,8 +487,8 @@ end
             @test length(g.v) == length(g.d) == length(labels(g)) == nv(g)
             check_freeslot(g)
 
-            # compacting hands the freed slots back, the default leaves them for later insertions
-            if compact
+            # compactifying hands the freed slots back, the default leaves them for later insertions
+            if compactify
                 @test length(g.e) == g.nde
             else
                 @test length(g.e) == edgelistsize
@@ -509,9 +509,9 @@ end
         check_freeslot(g)
 
         # removing every vertex leaves an empty graph either way
-        for compact in (false, true)
+        for compactify in (false, true)
             g = SpNautyGraph(cycle_graph(5))
-            @test rem_vertices!(g, 1:5; compact)
+            @test rem_vertices!(g, 1:5; compactify)
             @test nv(g) == 0
             @test ne(g) == 0
             @test g.nde == 0
@@ -520,14 +520,14 @@ end
 
         ### a shared buffer has to give the same answer as a fresh one, however stale or short
         sharedbuffer = Cint[]
-        for D in (false, true), compact in (false, true)
+        for D in (false, true), compactify in (false, true)
             source = D ? DiGraph(random_regular_graph(24, 4; rng)) : random_regular_graph(24, 4; rng)
             inds = [1, 5, 6, 17]
 
             fresh = SparseNautyGraph{D}(source)
-            rem_vertices!(fresh, inds; compact)
+            rem_vertices!(fresh, inds; compactify)
             shared = SparseNautyGraph{D}(source)
-            rem_vertices!(shared, inds; compact, buffer=sharedbuffer)
+            rem_vertices!(shared, inds; compactify, buffer=sharedbuffer)
 
             @test fresh == shared
             @test labels(fresh) == labels(shared)
@@ -549,15 +549,15 @@ end
         end
 
         ### a single removal goes through the same paths
-        for D in (false, true), compact in (false, true)
+        for D in (false, true), compactify in (false, true)
             source = D ? DiGraph(cycle_graph(7)) : cycle_graph(7)
             g = SparseNautyGraph{D}(source)
-            @test rem_vertex!(g, 3; compact)
+            @test rem_vertex!(g, 3; compactify)
             reference, _ = induced_subgraph(source, [1, 2, 4, 5, 6, 7])
             @test nv(g) == nv(reference)
             @test edges(g) == edges(reference)
             check_freeslot(g)
-            @test rem_vertex!(g, 99; compact) == false
+            @test rem_vertex!(g, 99; compactify) == false
         end
 
         ### unsorted or repeated indices are rejected before anything is mutated

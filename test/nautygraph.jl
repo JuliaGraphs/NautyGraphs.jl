@@ -662,6 +662,67 @@ end
             end
         end
 
+        ### neighborlists are kept sorted, so that reading a graph never reorders it
+        issortedgraph(g) = all(issorted(collect(outneighbors(g, v))) for v in vertices(g))
+        for D in (false, true)
+            # arrivals out of order, removals from the middle, and nauty's own layout all have to
+            # leave the lists sorted
+            g = SparseNautyGraph{D}(6)
+            for (s, d) in ((1, 5), (1, 2), (1, 4), (3, 6), (3, 1), (2, 2))
+                add_edge!(g, s, d)
+            end
+            @test issortedgraph(g)
+            @test rem_edge!(g, 1, 4)
+            @test issortedgraph(g)
+            canonize!(g)
+            @test issortedgraph(g)
+            @test issortedgraph(blockdiag(g, g))
+            for compactify in (false, true)
+                h = copy(g)
+                rem_vertices!(h, [2]; compactify)
+                @test issortedgraph(h)
+            end
+        end
+
+        # so reading a graph must leave it byte for byte as it was
+        for D in (false, true), canon in (false, true)
+            source = D ? DiGraph(random_regular_graph(20, 4; rng)) : random_regular_graph(20, 4; rng)
+            g = SparseNautyGraph{D}(source)
+            canon && canonize!(g)
+            before = (copy(g.e), copy(g.v), copy(g.d), g.nde, g._freeslot, g._nloops, iscanon(g))
+
+            hash(g)
+            collect(edges(g))
+            canonical_id(g)
+            edges(g) == edges(copy(g))
+            g == copy(g)
+            ne(g)
+            indegree(g, 1)
+            collect(inneighbors(g, 1))
+
+            @test (copy(g.e), copy(g.v), copy(g.d), g.nde, g._freeslot, g._nloops, iscanon(g)) == before
+        end
+
+        # which is what makes it safe for several tasks to read one graph at once
+        shared = SpNautyGraph(random_regular_graph(120, 6; rng))
+        expected = hash(shared)
+        expectedid = canonical_id(shared)
+        snapshot = (copy(shared.e), copy(shared.v), copy(shared.d))
+        hashes = Vector{UInt}(undef, 32)
+        @sync for i in 1:32
+            Threads.@spawn begin
+                local h = zero(UInt)
+                for _ in 1:20
+                    h = hash(shared)
+                    canonical_id(shared)
+                end
+                hashes[i] = h
+            end
+        end
+        @test all(==(expected), hashes)
+        @test canonical_id(shared) == expectedid
+        @test (shared.e, shared.v, shared.d) == snapshot
+
         ### the layout stays consistent under repeated modification, and keeps matching a SimpleGraph
         for D in (false, true)
             g = SparseNautyGraph{D}(6)

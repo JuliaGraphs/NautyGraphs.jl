@@ -249,8 +249,10 @@ function _unsafe_copyfromsparsegraphrep!(g::SparseNautyGraph, srep::SparseGraphR
     copy!(g.e, unsafe_wrap(Array, srep.e, srep.elen))
     copy!(g.v, unsafe_wrap(Array, srep.v, srep.vlen))
     copy!(g.d, unsafe_wrap(Array, srep.d, srep.dlen))
-    # nauty's layout is its own, so the hint has to start over
+    # nauty's layout is its own, so the hint has to start over and the lists have to be put back in
+    # order here rather than on the next read
     g._freeslot = 1
+    sortlists!(g)
     return
 end
 function _free_sparsegraphrep(srep::SparseGraphRep)
@@ -353,7 +355,6 @@ end
 Base.eltype(::Type{<:SimpleEdgeIter{<:SparseNautyGraph{false}}}) = Graphs.SimpleGraphEdge{Int}
 Base.eltype(::Type{<:SimpleEdgeIter{<:SparseNautyGraph{true}}}) = Graphs.SimpleDiGraphEdge{Int}
 function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph})
-    sortlists!(eit.g)
     return Base.iterate(eit, (1, 1))
 end
 function Base.iterate(eit::SimpleEdgeIter{<:SparseNautyGraph}, state)
@@ -381,9 +382,7 @@ end
 function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:SparseNautyGraph})
     g = e1.g
     h = e2.g
-    sortlists!(g)
-    sortlists!(h)
-    
+
     ne(g) == ne(h) || return false
     m = min(nv(g), nv(h))
 
@@ -402,7 +401,6 @@ end
 function Base.:(==)(e1::SimpleEdgeIter{<:SparseNautyGraph}, e2::SimpleEdgeIter{<:Graphs.SimpleGraphs.AbstractSimpleGraph})
     g = e1.g
     h = e2.g
-    sortlists!(g)
 
     ne(g) == ne(h) || return false
     is_directed(g) == is_directed(h) || return false
@@ -516,7 +514,24 @@ function _add_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     g.d[i] += 1
     g.nde += 1
     i == j && (g._nloops += 1)
+    _siftlast!(g, i)
     return true
+end
+
+# Move the entry just added to `i`'s neighborlist down into place. Keeping the lists sorted is what
+# lets reading a graph leave it alone; the alternative is sorting them on the way out, which turns
+# `hash` and `==` into mutations and makes them unsafe to call on a graph two tasks share. The entry
+# is already in place whenever the neighbors arrive in order, which is what the constructors do.
+@inline function _siftlast!(g::SparseNautyGraph, i::Integer)
+    firstpos = Int(zero2one(g.v[i]))
+    pos = firstpos + Int(g.d[i]) - 1
+    neighbor = g.e[pos]
+    while pos > firstpos && g.e[pos - 1] > neighbor
+        g.e[pos] = g.e[pos - 1]
+        pos -= 1
+    end
+    g.e[pos] = neighbor
+    return
 end
 function Graphs.rem_edge!(g::SparseNautyGraph, e::Edge)
     has_vertex(g, e.src) && has_vertex(g, e.dst) || return false
@@ -537,16 +552,12 @@ function _rem_directed_edge!(g::SparseNautyGraph, i::Integer, j::Integer)
     vrem = one2zero(v + idx)
     vlast = one2zero(v + d)
 
-    if idx == d
-        g.e[vrem] = NONEIGHBOR
-        g._freeslot = min(g._freeslot, vrem)
-    else
-        # Swap with the last edge and remove
-        elast = g.e[vlast]
-        g.e[vrem] = elast
-        g.e[vlast] = NONEIGHBOR
-        g._freeslot = min(g._freeslot, vlast)
+    # Closing the gap keeps the list sorted, where swapping the last entry into it would not.
+    for pos in vrem:(vlast - 1)
+        g.e[pos] = g.e[pos + 1]
     end
+    g.e[vlast] = NONEIGHBOR
+    g._freeslot = min(g._freeslot, Int(vlast))
     g.d[i] -= 1
     g.nde -= 1
     i == j && (g._nloops -= 1)

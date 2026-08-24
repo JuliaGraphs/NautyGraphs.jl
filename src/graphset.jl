@@ -142,38 +142,122 @@ end
 end
 
 function increase_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
-    for _ in Base.OneTo(Δm)
-        gset.m += 1
-        for i in Base.OneTo(gset.n)
-            insert!(gset.words, i * gset.m, zero(W))
-        end
+    Δm > 0 || return gset
+
+    oldm = gset.m
+    gset.m += Δm
+    resize!(gset.words, gset.n * gset.m)
+
+    # Spreading the rows apart in place has to run back to front, so that a row is only ever moved
+    # into space its successor has already vacated.
+    for i in gset.n:-1:1
+        copyto!(gset.words, (i - 1) * gset.m + 1, gset.words, (i - 1) * oldm + 1, oldm)
+        fill!(view(gset.words, ((i - 1) * gset.m + oldm + 1):(i * gset.m)), zero(W))
     end
     return gset
 end
-# function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
-#     return gset
-# end
-# function minimize_padding!(gset::Graphset{W}) where {W}
-# end
+function decrease_padding!(gset::Graphset{W}, Δm::Integer=1) where {W}
+    Δm > 0 || return gset
+    newm = gset.m - Δm
+    if newm < cld(gset.n, wordsize(W))
+        throw(ArgumentError("Cannot drop $Δm words of padding: n=$(gset.n) needs at least " *
+                "$(cld(gset.n, wordsize(W))) word(s) per vertex."))
+    end
 
-@inline function partial_leftshift(word::Unsigned, n::Integer, start::Integer, fillword::Unsigned=zero(word))
-    # Starting from the `start`th bit from the left of `word`, shift all bits to the left `n` times,
-    # refill right-most bits with bits from `fillword`. The `n` bits to the left of `start` are
-    # overwritten.
+    oldm = gset.m
+    gset.m = newm
+    # Closing the gaps between rows in place has to run front to back, so that a row is only ever
+    # moved into space its predecessor has already vacated.
+    for i in Base.OneTo(gset.n)
+        copyto!(gset.words, (i - 1) * newm + 1, gset.words, (i - 1) * oldm + 1, newm)
+    end
 
-    # Select all to-be-moved bits
-    mask = typemax(word) >> (start - 1)
+    newlength = gset.n * newm
+    if 2 * newlength < length(gset.words)
+        # `resize!` hands back the length but keeps the buffer, so a large drop gets a new array
+        gset.words = gset.words[Base.OneTo(newlength)]
+    else
+        resize!(gset.words, newlength)
+    end
+    return gset
+end
 
-    unshifted_part = word & (~mask << n)
-    shifted_part = (word & mask) << n
-    filled_part = fillword >> (wordsize(typeof(word)) - n)
+# Drop the padding that is not needed to hold `gset.n` vertices.
+minimize_padding!(gset::Graphset{W}) where {W} = decrease_padding!(gset, gset.m - cld(gset.n, wordsize(W)))
 
-    return unshifted_part | shifted_part | filled_part
+# Bit ranges within a row of `m` words are addressed by a zero-based position counted from the most
+# significant bit of the row's first word, which is the order `bitaddress` lays a vertex out in.
+@inline _topmask(::Type{W}, len::Integer) where {W} = typemax(W) << (wordsize(W) - len)
+
+# Read the `len <= wordsize(W)` bits at `pos`, returned aligned to the top of a word.
+@inline function _readbits(words::Vector{W}, base::Integer, pos::Integer, len::Integer) where {W}
+    ws = wordsize(W)
+    idx = base + divlogpow2(logwordsize(W), pos) + 1
+    offset = pos & (ws - 1)
+    bits = words[idx] << offset
+    if offset + len > ws
+        bits |= words[idx + 1] >> (ws - offset)
+    end
+    return bits & _topmask(W, len)
+end
+
+# Write the top `len <= wordsize(W)` bits of `bits` at `pos`, leaving the surrounding bits alone.
+@inline function _writebits!(words::Vector{W}, base::Integer, pos::Integer, len::Integer, bits::W) where {W}
+    ws = wordsize(W)
+    idx = base + divlogpow2(logwordsize(W), pos) + 1
+    offset = pos & (ws - 1)
+    mask = _topmask(W, len) >> offset
+    words[idx] = (words[idx] & ~mask) | ((bits >> offset) & mask)
+    if offset + len > ws
+        tailmask = _topmask(W, offset + len - ws)
+        words[idx + 1] = (words[idx + 1] & ~tailmask) | ((bits << (ws - offset)) & tailmask)
+    end
+    return
+end
+
+# Move `len` bits of a row from `from` to the earlier position `to`. Each chunk is read before it is
+# written, so the two ranges may overlap.
+@inline function _movebits!(words::Vector{W}, base::Integer, from::Integer, to::Integer, len::Integer) where {W}
+    from == to && return
+    ws = wordsize(W)
+    while len > 0
+        chunk = min(len, ws)
+        _writebits!(words, base, to, chunk, _readbits(words, base, from, chunk))
+        from += chunk
+        to += chunk
+        len -= chunk
+    end
+    return
+end
+
+# Copy `src` into the diagonal block of `dest` starting at row and column `offset`, which is assumed
+# to be zero. Going through whole words is what makes this cheaper than a bit-by-bit broadcast.
+function _copyblock!(dest::Graphset{W}, src::Graphset{W}, offset::Integer) where {W}
+    ws = wordsize(W)
+    for i in Base.OneTo(src.n)
+        destbase = (offset + i - 1) * dest.m
+        srcbase = (i - 1) * src.m
+        position = 0
+        while position < src.n
+            chunk = min(src.n - position, ws)
+            _writebits!(dest.words, destbase, offset + position, chunk,
+                    _readbits(src.words, srcbase, position, chunk))
+            position += chunk
+        end
+    end
+    return dest
+end
+# word types can differ, in which case there is nothing to copy word by word
+function _copyblock!(dest::Graphset, src::Graphset, offset::Integer)
+    dest[(offset + 1):(offset + src.n), (offset + 1):(offset + src.n)] .= src
+    return dest
 end
 
 function _add_vertices!(gset::Graphset{W}, n::Integer) where {W} # TODO think of a better name
     increase_padding!(gset, cld(gset.n + n, wordsize(gset)) - gset.m)
-    append!(gset.words, fill(zero(W), n*gset.m))
+    oldlength = length(gset.words)
+    resize!(gset.words, oldlength + n * gset.m)
+    fill!(view(gset.words, (oldlength + 1):length(gset.words)), zero(W))
     gset.n += n
     return gset
 end
@@ -181,29 +265,39 @@ _add_vertex!(gset::Graphset) = _add_vertices!(gset, 1)
 
 function _rem_vertices!(gset::Graphset{W}, inds) where {W}
     nrv = length(inds)
+    # checked before anything is mutated, so that bad indices cannot leave a half-shifted graphset
+    issorted(inds, lt=<=) || throw(ArgumentError("indices must be unique and sorted"))
 
+    nold = gset.n
     deleteat!(gset.words, Iterators.flatten(1+(i-1)*gset.m:i*gset.m for i in inds))
     gset.n -= nrv
 
-    n, m = gset.n, gset.m
-    linidx = LinearIndices((m, n))'
-
-    δ = 0
-    lastind = 0
-    for ind in inds
-        ind < lastind && throw(ArgumentError("indices must be unique and sorted"))
-
-        wordidx, bitidx = bitaddress(gset, 1, ind - δ)
-        for i in 1:n
-            fillword = wordidx == m ? zero(W) : gset.words[linidx[i, wordidx+1]]
-            gset.words[linidx[i, wordidx]] = partial_leftshift(gset.words[linidx[i, wordidx]], 1, bitidx+1, fillword)
-
-            for j in wordidx+1:m
-                fillword = j == m ? zero(W) : gset.words[linidx[i, j+1]]
-                gset.words[linidx[i, j]] = partial_leftshift(gset.words[linidx[i, j]], 1, 1, fillword)
+    n, m, ws = gset.n, gset.m, wordsize(W)
+    for i in Base.OneTo(n)
+        # The surviving columns form runs between the removed ones. Moving each run straight to where
+        # it belongs costs one pass over the row, where shifting once per removed column costs `nrv`.
+        base = (i - 1) * m
+        written = 0
+        previous = 0
+        for ind in inds
+            runlength = ind - previous - 1
+            if runlength > 0
+                _movebits!(gset.words, base, previous, written, runlength)
+                written += runlength
             end
+            previous = ind
         end
-        δ += 1
+        _movebits!(gset.words, base, previous, written, nold - previous)
+
+        # the columns the runs vacated have to read as zero, so that padding never reaches nauty
+        stale = m * ws - n
+        position = n
+        while stale > 0
+            chunk = min(stale, ws)
+            _writebits!(gset.words, base, position, chunk, zero(W))
+            position += chunk
+            stale -= chunk
+        end
     end
     return gset
 end

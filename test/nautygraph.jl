@@ -392,6 +392,364 @@ end
                 @test bb_ng == bb_g
             end
         end
+
+        ### the dense blocks are copied word by word, which has to survive every offset and word type
+        for W in (UInt8, UInt16, UInt32, UInt64), ng in (0, 1, 7, 8, 9, 17, 63, 64, 65), nh in (0, 1, 8, 17, 65)
+            Ag = rand(rng, Bool, ng, ng)
+            Ag = Ag .| transpose(Ag)
+            Ah = rand(rng, Bool, nh, nh)
+            Ah = Ah .| transpose(Ah)
+
+            bd = blockdiag(DenseNautyGraph{false,W}(Ag), DenseNautyGraph{false,W}(Ah))
+            reference = zeros(Bool, ng + nh, ng + nh)
+            reference[1:ng, 1:ng] = Ag
+            reference[(ng + 1):end, (ng + 1):end] = Ah
+
+            @test nv(bd) == ng + nh
+            @test collect(bd.graphset) == reference
+            @test ne(bd) == ne(DenseNautyGraph{false,W}(Ag)) + ne(DenseNautyGraph{false,W}(Ah))
+        end
+
+        # graphs of different word types fall back to an elementwise copy
+        Ag = rand(rng, Bool, 20, 20)
+        Ag = Ag .| transpose(Ag)
+        Ah = rand(rng, Bool, 13, 13)
+        Ah = Ah .| transpose(Ah)
+        bd = blockdiag(DenseNautyGraph{false,UInt64}(Ag), DenseNautyGraph{false,UInt32}(Ah))
+        reference = zeros(Bool, 33, 33)
+        reference[1:20, 1:20] = Ag
+        reference[21:end, 21:end] = Ah
+        @test collect(bd.graphset) == reference
+
+        ### compactifying a removal gives back the words the survivors no longer need
+        for D in (false, true), (n0, keep) in ((80, 5), (200, 70), (300, 64)), compactify in (false, true)
+            A = rand(rng, Bool, n0, n0)
+            D || (A = A .| transpose(A))
+            g = DenseNautyGraph{D}(A)
+            widthbefore = g.graphset.m
+            rem_vertices!(g, collect((keep + 1):n0); compactify)
+
+            @test nv(g) == keep
+            @test length(g.graphset.words) == g.graphset.n * g.graphset.m
+            if compactify
+                @test g.graphset.m == cld(keep, NautyGraphs.wordsize(UInt))
+            else
+                @test g.graphset.m == widthbefore
+            end
+
+            # either way the graph is indistinguishable from the same one built directly
+            reference = DenseNautyGraph{D}(A[1:keep, 1:keep])
+            @test g == reference
+            @test ne(g) == ne(reference)
+            @test hash(g) == hash(reference)
+            @test canonical_id(g) == canonical_id(reference)
+        end
+
+        # a single removal takes the flag too
+        A = rand(rng, Bool, 70, 70)
+        g = NautyGraph(A .| transpose(A))
+        @test rem_vertex!(g, 70; compactify=true)
+        @test g.graphset.m == cld(69, NautyGraphs.wordsize(UInt))
+        @test rem_vertex!(g, 99; compactify=true) == false
+
+        ### naming the word type must not send a graphset through the `AbstractMatrix` constructor
+        gset = NautyGraphs.Graphset{UInt64}(rand(rng, Bool, 12, 12))
+        @test DenseNautyGraph{true,UInt64}(gset).graphset === gset
+        @test DenseNautyGraph{true}(gset).graphset === gset
+    end
+
+    @testset "edgelist layout" begin
+        # `_freeslot` promises that no slot before it is free; every operation has to keep that true
+        function check_freeslot(g)
+            @test all(g.e[k] != NautyGraphs.NONEIGHBOR for k in 1:min(g._freeslot - 1, length(g.e)))
+            @test g.nde == count(!=(NautyGraphs.NONEIGHBOR), g.e)
+            return
+        end
+
+        ### the vertex offsets are sized for nauty, not inferred from a float literal
+        @test SpNautyGraph(5).v isa Vector{Csize_t}
+        @test SpNautyDiGraph(5).v isa Vector{Csize_t}
+
+        ### every constructor lays the edgelist down exactly packed, with no slots to reclaim
+        for D in (false, true)
+            source = D ? DiGraph(cycle_graph(6)) : cycle_graph(6)
+            for g in (SparseNautyGraph{D}(source),
+                      SparseNautyGraph{D}(collect(edges(source))),
+                      SparseNautyGraph{D}(Matrix(adjacency_matrix(source))))
+                @test length(g.e) == g.nde
+                @test ne(g) == ne(source)
+                @test edges(g) == edges(source)
+                check_freeslot(g)
+            end
+        end
+
+        # a weighted matrix inserts on every nonzero, so the edgelist has to be sized the same way
+        g = SpNautyGraph([0 2 0; 2 0 3; 0 3 0])
+        @test ne(g) == 2
+        @test length(g.e) == g.nde == 4
+        check_freeslot(g)
+
+        ### blockdiag must not renumber the free slots of the right-hand graph into real vertices
+        h = SpNautyGraph(3)
+        add_edge!(h, 1, 2)
+        add_edge!(h, 1, 3)
+        rem_edge!(h, 1, 3)
+        bd = blockdiag(h, h)
+        @test bd.nde == count(!=(NautyGraphs.NONEIGHBOR), bd.e)
+        @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5)]
+        check_freeslot(bd)
+
+        # a vertex of the right-hand graph still has no list of its own, wherever its offset points
+        @test add_edge!(bd, 6, 6)
+        @test collect(edges(bd)) == [Edge(1, 2), Edge(4, 5), Edge(6, 6)]
+        check_freeslot(bd)
+
+        ### removing vertices gives the same graph whether or not the edgelist is compactified
+        for D in (false, true), compactify in (false, true)
+            source = D ? DiGraph(random_regular_graph(30, 4; rng)) : random_regular_graph(30, 4; rng)
+            g = SparseNautyGraph{D}(source)
+            edgelistsize = length(g.e)
+            inds = [2, 7, 8, 20]
+            rem_vertices!(g, inds; compactify)
+            reference, _ = induced_subgraph(source, setdiff(1:30, inds))
+            @test nv(g) == nv(reference)
+            @test ne(g) == ne(reference)
+            @test edges(g) == edges(reference)
+            @test length(g.v) == length(g.d) == length(labels(g)) == nv(g)
+            check_freeslot(g)
+
+            # compactifying hands the freed slots back, the default leaves them for later insertions
+            if compactify
+                @test length(g.e) == g.nde
+            else
+                @test length(g.e) == edgelistsize
+            end
+        end
+
+        # the default removal must not allocate a new edgelist
+        g = SpNautyDiGraph(DiGraph(random_regular_graph(200, 4; rng)))
+        edgelist = g.e
+        rem_vertices!(g, [3, 40, 41, 150])
+        @test g.e === edgelist
+
+        # a neighborlist started after the removal picks up one of the freed slots
+        before = length(g.e)
+        add_vertex!(g)
+        @test add_edge!(g, nv(g), 1)
+        @test length(g.e) == before
+        check_freeslot(g)
+
+        # removing every vertex leaves an empty graph either way
+        for compactify in (false, true)
+            g = SpNautyGraph(cycle_graph(5))
+            @test rem_vertices!(g, 1:5; compactify)
+            @test nv(g) == 0
+            @test ne(g) == 0
+            @test g.nde == 0
+            check_freeslot(g)
+        end
+
+        ### a shared buffer has to give the same answer as a fresh one, however stale or short
+        sharedbuffer = Cint[]
+        for D in (false, true), compactify in (false, true)
+            source = D ? DiGraph(random_regular_graph(24, 4; rng)) : random_regular_graph(24, 4; rng)
+            inds = [1, 5, 6, 17]
+
+            fresh = SparseNautyGraph{D}(source)
+            rem_vertices!(fresh, inds; compactify)
+            shared = SparseNautyGraph{D}(source)
+            rem_vertices!(shared, inds; compactify, buffer=sharedbuffer)
+
+            @test fresh == shared
+            @test labels(fresh) == labels(shared)
+            @test (shared.nde, shared._freeslot) == (fresh.nde, fresh._freeslot)
+            @test length(sharedbuffer) >= nv(shared) + length(inds)
+            check_freeslot(shared)
+        end
+
+        # the buffer grows to fit and is reusable across graphs of different sizes
+        buffer = Vector{Cint}(undef, 3)
+        @test buffer isa Vector{Cint}
+        @test length(buffer) == 3
+        for n in (5, 40, 9)
+            g = SpNautyGraph(cycle_graph(n))
+            reference = SpNautyGraph(cycle_graph(n))
+            @test rem_vertices!(g, [2, 3]; buffer)
+            @test rem_vertices!(reference, [2, 3])
+            @test g == reference
+        end
+
+        ### a single removal goes through the same paths
+        for D in (false, true), compactify in (false, true)
+            source = D ? DiGraph(cycle_graph(7)) : cycle_graph(7)
+            g = SparseNautyGraph{D}(source)
+            @test rem_vertex!(g, 3; compactify)
+            reference, _ = induced_subgraph(source, [1, 2, 4, 5, 6, 7])
+            @test nv(g) == nv(reference)
+            @test edges(g) == edges(reference)
+            check_freeslot(g)
+            @test rem_vertex!(g, 99; compactify) == false
+        end
+
+        ### unsorted or repeated indices are rejected before anything is mutated
+        for D in (false, true)
+            g = SparseNautyGraph{D}(cycle_graph(6))
+            before = (g.nv, g.nde, copy(g.e), copy(g.v), copy(g.d), copy(labels(g)))
+            for inds in ([3, 1], [2, 2], [1, 3, 2])
+                @test_throws ArgumentError rem_vertices!(g, inds)
+                @test (g.nv, g.nde, g.e, g.v, g.d, labels(g)) == before
+            end
+
+            dense = DenseNautyGraph{D}(cycle_graph(6))
+            densebefore = (nv(dense), ne(dense), copy(dense.graphset.words), copy(labels(dense)))
+            for inds in ([3, 1], [2, 2], [1, 3, 2])
+                @test_throws ArgumentError rem_vertices!(dense, inds)
+                @test (nv(dense), ne(dense), dense.graphset.words, labels(dense)) == densebefore
+            end
+        end
+
+        ### `ne` reads a maintained self-loop count, so it has to survive every way a loop appears
+        loopcount(g) = count(v -> has_edge(g, v, v), vertices(g))
+        for D in (false, true)
+            edgelist = [Edge(1, 1), Edge(1, 2), Edge(2, 2), Edge(2, 3), Edge(1, 1)]
+            matrix = [1 1 0; 1 1 1; 0 1 0]
+            source = D ? DiGraph(3) : Graph(3)
+            add_edge!(source, 1, 1)
+            add_edge!(source, 1, 2)
+
+            for g in (SparseNautyGraph{D}(edgelist), SparseNautyGraph{D}(matrix), SparseNautyGraph{D}(source))
+                @test g._nloops == loopcount(g)
+                @test ne(g) == length(collect(edges(g)))
+            end
+
+            # and through every operation that can add or drop one
+            g = SparseNautyGraph{D}(4)
+            @test add_edge!(g, 2, 2) && add_edge!(g, 1, 2) && add_edge!(g, 3, 3)
+            @test g._nloops == loopcount(g) == 2
+            @test ne(g) == length(collect(edges(g)))
+
+            @test rem_edge!(g, 3, 3)
+            @test g._nloops == loopcount(g) == 1
+            @test copy(g)._nloops == 1
+            @test blockdiag(g, g)._nloops == 2
+            @test ne(blockdiag(g, g)) == 2 * ne(g)
+
+            for compactify in (false, true)
+                h = copy(g)
+                rem_vertices!(h, [2]; compactify)
+                @test h._nloops == loopcount(h) == 0
+                @test ne(h) == length(collect(edges(h)))
+            end
+
+            # canonizing permutes the vertices but cannot change how many loops there are
+            k = copy(g)
+            canonize!(k)
+            @test k._nloops == loopcount(k) == 1
+            @test ne(k) == ne(g)
+        end
+
+        ### in-degree has no reverse index, so it must agree with the forward scan it replaces
+        for n in (1, 6, 40)
+            source = DiGraph(n)
+            for _ in 1:(3n)
+                add_edge!(source, rand(rng, 1:n), rand(rng, 1:n))
+            end
+            g = SpNautyDiGraph(source)
+            n > 2 && rem_edge!(g, first(collect(edges(g))))   # leave free slots in the edgelist
+            for v in vertices(g)
+                @test indegree(g, v) == sum(has_edge(g, i, v) for i in vertices(g))
+                @test indegree(g, v) == length(collect(inneighbors(g, v)))
+            end
+        end
+
+        ### neighborlists are kept sorted, so that reading a graph never reorders it
+        issortedgraph(g) = all(issorted(collect(outneighbors(g, v))) for v in vertices(g))
+        for D in (false, true)
+            # arrivals out of order, removals from the middle, and nauty's own layout all have to
+            # leave the lists sorted
+            g = SparseNautyGraph{D}(6)
+            for (s, d) in ((1, 5), (1, 2), (1, 4), (3, 6), (3, 1), (2, 2))
+                add_edge!(g, s, d)
+            end
+            @test issortedgraph(g)
+            @test rem_edge!(g, 1, 4)
+            @test issortedgraph(g)
+            canonize!(g)
+            @test issortedgraph(g)
+            @test issortedgraph(blockdiag(g, g))
+            for compactify in (false, true)
+                h = copy(g)
+                rem_vertices!(h, [2]; compactify)
+                @test issortedgraph(h)
+            end
+        end
+
+        # so reading a graph must leave it byte for byte as it was
+        for D in (false, true), canon in (false, true)
+            source = D ? DiGraph(random_regular_graph(20, 4; rng)) : random_regular_graph(20, 4; rng)
+            g = SparseNautyGraph{D}(source)
+            canon && canonize!(g)
+            before = (copy(g.e), copy(g.v), copy(g.d), g.nde, g._freeslot, g._nloops, iscanon(g))
+
+            hash(g)
+            collect(edges(g))
+            canonical_id(g)
+            edges(g) == edges(copy(g))
+            g == copy(g)
+            ne(g)
+            indegree(g, 1)
+            collect(inneighbors(g, 1))
+
+            @test (copy(g.e), copy(g.v), copy(g.d), g.nde, g._freeslot, g._nloops, iscanon(g)) == before
+        end
+
+        # which is what makes it safe for several tasks to read one graph at once
+        shared = SpNautyGraph(random_regular_graph(120, 6; rng))
+        expected = hash(shared)
+        expectedid = canonical_id(shared)
+        snapshot = (copy(shared.e), copy(shared.v), copy(shared.d))
+        hashes = Vector{UInt}(undef, 32)
+        @sync for i in 1:32
+            Threads.@spawn begin
+                local h = zero(UInt)
+                for _ in 1:20
+                    h = hash(shared)
+                    canonical_id(shared)
+                end
+                hashes[i] = h
+            end
+        end
+        @test all(==(expected), hashes)
+        @test canonical_id(shared) == expectedid
+        @test (shared.e, shared.v, shared.d) == snapshot
+
+        ### the layout stays consistent under repeated modification, and keeps matching a SimpleGraph
+        for D in (false, true)
+            g = SparseNautyGraph{D}(6)
+            reference = D ? DiGraph(6) : Graph(6)
+            for _ in 1:200
+                op = rand(rng, 1:5)
+                if op <= 2
+                    s, d = rand(rng, 1:nv(g)), rand(rng, 1:nv(g))
+                    @test add_edge!(g, s, d) == add_edge!(reference, s, d)
+                elseif op == 3
+                    s, d = rand(rng, 1:nv(g)), rand(rng, 1:nv(g))
+                    @test rem_edge!(g, s, d) == rem_edge!(reference, s, d)
+                elseif op == 4
+                    add_vertex!(g)
+                    add_vertex!(reference)
+                elseif nv(g) > 1
+                    i = rand(rng, 1:nv(g))
+                    rem_vertices!(g, [i])
+                    kept, _ = induced_subgraph(reference, setdiff(1:nv(reference), [i]))
+                    reference = kept
+                end
+                check_freeslot(g)
+            end
+            @test nv(g) == nv(reference)
+            @test ne(g) == ne(reference)
+            @test edges(g) == edges(reference)
+        end
     end
 
     @testset "conversion" begin

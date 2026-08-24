@@ -89,6 +89,39 @@ rem_vertices!(g5, [1, 3, 5]) # removes vertices 1, 3, and 5
 true
 ```
 
+### Giving memory back after a removal
+Removing vertices leaves space behind. A `SparseNautyGraph` keeps the freed slots in its edgelist, and a
+`DenseNautyGraph` keeps as many words per vertex as it had at its largest. Both are reserved capacity, so a
+graph that grows again reuses them and allocates nothing.
+
+Pass `compactify=true` to hand that space back instead, which suits a graph that has shrunk and will stay small:
+```jldoctest default; output=false
+
+g6 = NautyGraph(200)
+rem_vertices!(g6, collect(51:200); compactify=true)
+
+# output
+true
+```
+
+What holding the space costs differs between the two formats.
+Free slots in a sparse edgelist are never read, so keeping them is nearly free.
+The extra words of a dense graph are read by every canonization and every hash, so a dense graph that has
+shrunk by a lot is the case where compactifying pays off.
+
+Removing vertices from a `SparseNautyGraph` also needs one scratch entry per vertex to renumber the survivors.
+`rem_vertices!` allocates that itself unless it is handed a `buffer`, which is worth hoisting out of a loop that
+shrinks a graph over and over.
+
+!!! note "Reading a graph does not modify it"
+    Hashing, comparing, iterating the edges, and canonization functions that return a result rather than
+    changing the graph, such as [`canonical_id`](@ref) and [`canonical_permutation`](@ref), all leave a graph
+    exactly as they found it. Any number of tasks may therefore read one graph at the same time.
+
+    Modifying a graph is a different matter: [`canonize!`](@ref), the functions on this page, and
+    [`setlabels!`](@ref) must not run alongside anything else touching the same graph. A `NautyBuffer`
+    is scratch space that belongs to one task at a time as well.
+
 ### Edge labeled graphs
 NautyGraphs.jl does not support edge labels. However, it is possible to manually represent any edge-labeled graph as a (larger)
 vertex labeled graph. See, for example, Section 14 of the [nauty manual](https://pallini.di.uniroma1.it/Guide.html) for more information.

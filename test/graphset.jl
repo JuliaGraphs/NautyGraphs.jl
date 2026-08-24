@@ -72,6 +72,101 @@ end
     @test Graphset{UInt64}(5, 1) != Graphset{UInt64}(10, 1)
     @test Graphset{UInt64}(64, 1) != Graphset{UInt64}(128, 2)
 
+    ### padding is spread in place, so it has to leave every row's content where it belongs
+    for W in (UInt8, UInt64), n in [0, 1, 5, 8, 9, 64, 65, 130]
+        A = rand(rng, Bool, n, n)
+        gs = Graphset{W}(A)
+        reference = collect(gs)
+        for Δm in (1, 3, 1)
+            increase_padding!(gs, Δm)
+            @test collect(gs) == reference
+            @test length(gs.words) == gs.n * gs.m
+        end
+        @test gs == Graphset{W}(A)
+    end
+
+    # a non-positive increment is a no-op rather than a corruption
+    gs = Graphset{UInt64}(rand(rng, Bool, 20, 20))
+    reference = collect(gs)
+    increase_padding!(gs, 0)
+    @test collect(gs) == reference
+    @test length(gs.words) == gs.n * gs.m
+
+    ### padding can be given back again, leaving every row's content where it belongs
+    for W in (UInt8, UInt16, UInt32, UInt64), n in [0, 1, 5, 8, 9, 64, 65, 130]
+        A = rand(rng, Bool, n, n)
+        mmin = cld(n, NautyGraphs.wordsize(W))
+        gs = Graphset{W}(A, mmin + 3)
+        reference = collect(gs)
+
+        NautyGraphs.decrease_padding!(gs, 2)
+        @test gs.m == mmin + 1
+        @test collect(gs) == reference
+        @test length(gs.words) == gs.n * gs.m
+        @test gs == Graphset{W}(A, gs.m)
+
+        NautyGraphs.minimize_padding!(gs)
+        @test gs.m == mmin
+        @test collect(gs) == reference
+        @test gs == Graphset{W}(A)
+
+        # widening and narrowing again has to come back to where it started
+        increase_padding!(gs, 4)
+        NautyGraphs.minimize_padding!(gs)
+        @test gs.m == mmin
+        @test collect(gs) == reference
+    end
+
+    # a graphset that is already minimal is left alone, and dropping more is refused
+    gs = Graphset{UInt64}(rand(rng, Bool, 70, 70))
+    reference = collect(gs)
+    @test gs.m == 2
+    @test_throws ArgumentError NautyGraphs.decrease_padding!(gs, 2)
+    NautyGraphs.minimize_padding!(gs)
+    NautyGraphs.minimize_padding!(gs)
+    @test gs.m == 2
+    @test collect(gs) == reference
+    @test NautyGraphs.decrease_padding!(gs, 0) === gs
+
+    ### unsorted or repeated indices are rejected before anything is mutated
+    gs = Graphset{UInt64}(rand(rng, Bool, 6, 6))
+    reference = copy(gs.words)
+    for inds in ([3, 1], [2, 2], [1, 3, 2])
+        @test_throws ArgumentError NautyGraphs._rem_vertices!(gs, inds)
+        @test gs.n == 6
+        @test gs.words == reference
+    end
+
+    ### removing several vertices at once moves whole runs of columns, not one column at a time
+    for W in (UInt8, UInt16, UInt32, UInt64), n in [1, 5, 8, 9, 16, 17, 63, 64, 65, 100]
+        A = rand(rng, Bool, n, n)
+        for extra_m in (0, 2)
+            inds = sort(randperm(rng, n)[1:rand(rng, 1:n)])
+            keep = setdiff(1:n, inds)
+            gs = Graphset{W}(A, cld(n, NautyGraphs.wordsize(W)) + extra_m)
+            NautyGraphs._rem_vertices!(gs, inds)
+
+            @test gs.n == length(keep)
+            @test collect(gs) == A[keep, keep]
+            # the vacated columns have to read as zero, or the padding reaches nauty and the hash
+            @test gs == Graphset{W}(A[keep, keep], gs.m)
+        end
+    end
+
+    # a bulk removal has to agree with the same removals done one at a time
+    for W in (UInt8, UInt64), n in (10, 70, 130)
+        A = rand(rng, Bool, n, n)
+        inds = sort(randperm(rng, n)[1:rand(rng, 1:(n ÷ 2))])
+        bulk = Graphset{W}(A)
+        NautyGraphs._rem_vertices!(bulk, inds)
+        onebyone = Graphset{W}(A)
+        for ind in reverse(inds)
+            NautyGraphs._rem_vertex!(onebyone, ind)
+        end
+        @test bulk == onebyone
+        @test collect(bulk) == collect(onebyone)
+    end
+
     @testset "_maybe_copy_active_words" begin
         for W in (UInt16, UInt32, UInt64), n in [0, 1, 15, 16, 17, 63, 64, 65, 200]
             A = rand(rng, Bool, n, n)

@@ -694,7 +694,6 @@ end
 function canonical_id(g::SparseNautyGraph; buffer::NautyBuffer=NautyBuffer(g))
     # needs to work for 0 vertices
     if iscanon(g)
-        sortlists!(g)
         return _SHAhash_adjacency(g, g._labels)
     else
         _fillcanon!(buffer, g)

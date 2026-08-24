@@ -26,6 +26,10 @@ function DenseNautyGraph{D}(graphset::Graphset{W}; vertex_labels=nothing) where 
     return DenseNautyGraph{D,W}(graphset, vertex_labels, ne, false)
 end
 
+function DenseNautyGraph{D,W}(graphset::Graphset{W}; vertex_labels=nothing) where {D,W<:Unsigned}
+    return DenseNautyGraph{D}(graphset; vertex_labels)
+end
+
 """
     NautyGraph <: AbstractNautyGraph{Int}
 
@@ -274,24 +278,42 @@ end
 Graphs.add_vertices!(g::DenseNautyGraph; vertex_labels) = Graphs.add_vertices!(g, length(vertex_labels); vertex_labels)
 Graphs.add_vertex!(g::DenseNautyGraph; vertex_label::Integer=0) = Graphs.add_vertices!(g, 1; vertex_labels=vertex_label) > 0
 
-function Graphs.rem_vertices!(g::DenseNautyGraph, inds)
+"""
+    rem_vertices!(g::DenseNautyGraph, inds; compactify=false)
+
+Remove the vertices `inds` from `g`, which must be given in increasing order.
+Return `false` without modifying `g` if any of `inds` is not a vertex of `g`.
+
+The removed vertices leave the graphset holding more words per vertex than the survivors need.
+Pass `compactify=true` to give those words back; every later nauty call and hash reads them otherwise.
+"""
+function Graphs.rem_vertices!(g::DenseNautyGraph, inds; compactify=false)
     all(i->has_vertex(g, i), inds) || return false
 
     _rem_vertices!(g.graphset, inds)
     deleteat!(g._labels, inds)
+    compactify && minimize_padding!(g.graphset)
 
     g.ne = is_directed(g) ? sum(g.graphset) : (sum(g.graphset) + tr(g.graphset)) ÷ 2
     g.iscanon = false
     return true
 end
-Graphs.rem_vertex!(g::DenseNautyGraph, i::Integer) = rem_vertices!(g, (i,))
+
+"""
+    rem_vertex!(g::DenseNautyGraph, i::Integer; compactify=false)
+
+Remove vertex `i` from `g`. Return `false` without modifying `g` if `i` is not a vertex of `g`.
+
+See [`rem_vertices!`](@ref) for what `compactify` does.
+"""
+Graphs.rem_vertex!(g::DenseNautyGraph, i::Integer; kwargs...) = rem_vertices!(g, (i,); kwargs...)
 
 function Graphs.blockdiag(g::DenseNautyGraph{D1,W}, h::DenseNautyGraph{D2}) where {D1,D2,W}
     ng, nh = nv(g), nv(h)
 
     gset = Graphset{wordtype(g.graphset)}(ng+nh)
-    gset[1:ng, 1:ng] .= g.graphset
-    gset[ng+1:end, ng+1:end] .= h.graphset
+    _copyblock!(gset, g.graphset, 0)
+    _copyblock!(gset, h.graphset, ng)
     D = D1 || D2
     return DenseNautyGraph{D,W}(gset; vertex_labels=vcat(labels(g), labels(h)))
 end
